@@ -7,9 +7,8 @@ A command-line text-to-speech tool using the Kokoro ONNX model, supporting multi
 - Multiple language and voice support
 - EPUB and TXT file input support
 - Streaming audio playback
-- Split output into chapters and chunks
+- Split output into chapters
 - Adjustable speech speed
-- Progress indicators with spinning wheel
 - WAV and MP3 output formats
 - Chapter merging capability
 
