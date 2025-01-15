@@ -13,3 +13,5 @@ test.epub
 *.wav
 *.mp3
 book_audio/
+voices.json
+kokoro-v0_19.onnx
