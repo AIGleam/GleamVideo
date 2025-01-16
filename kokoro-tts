@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 
-import soundfile as sf
-import sounddevice as sd
-from kokoro_onnx import Kokoro
+# Standard library imports
 import os
 import sys
 import itertools
 import threading
 import time
 import signal
-from ebooklib import epub
-from bs4 import BeautifulSoup
+import difflib
 import warnings
 from threading import Event
-import difflib
-import xml.etree.ElementTree as ET
+
+# Third-party imports
+from ebooklib import epub, ITEM_DOCUMENT
+from bs4 import BeautifulSoup
+import soundfile as sf
+import sounddevice as sd
+from kokoro_onnx import Kokoro
 
 warnings.filterwarnings("ignore", category=UserWarning, module='ebooklib')
 warnings.filterwarnings("ignore", category=FutureWarning, module='ebooklib')
@@ -49,9 +51,8 @@ def extract_text_from_epub(epub_file):
     book = epub.read_epub(epub_file)
     full_text = ""
     for item in book.get_items():
-        # Check if the item is a document based on mime type (e.g., text/html, application/xhtml+xml)
-        if item.get_type() == 9:  # 9 corresponds to DOCUMENT in ebooklib
-            soup = BeautifulSoup(item.get_body_content(), "html.parser")  # Use get_body_content() here
+        if item.get_type() == ITEM_DOCUMENT:
+            soup = BeautifulSoup(item.get_body_content(), "html.parser")
             full_text += soup.get_text()
     return full_text
 
@@ -167,138 +168,180 @@ def validate_voice(voice, kokoro):
         sys.exit(1)
 
 def extract_chapters_from_epub(epub_file, debug=False):
-    """Extract chapters from epub file with their titles using NCX when available."""
+    """Extract chapters from epub file using ebooklib's metadata and TOC."""
+    if not os.path.exists(epub_file):
+        raise FileNotFoundError(f"EPUB file not found: {epub_file}")
+    
     book = epub.read_epub(epub_file)
     chapters = []
-    chapter_titles = {}
-    
-    # First try to get chapter titles from NCX
-    ncx_found = False
     
     if debug:
-        print("\nSearching for NCX file...")
-        for item in book.get_items():
-            print(f"Found item: {item.file_name} (type: {item.get_type()})")
+        print("\nBook Metadata:")
+        for key, value in book.metadata.items():
+            print(f"  {key}: {value}")
+        
+        print("\nTable of Contents:")
+        def print_toc(items, depth=0):
+            for item in items:
+                indent = "  " * depth
+                if isinstance(item, tuple):
+                    section_title, section_items = item
+                    print(f"{indent}• Section: {section_title}")
+                    print_toc(section_items, depth + 1)
+                elif isinstance(item, epub.Link):
+                    print(f"{indent}• {item.title} -> {item.href}")
+        print_toc(book.toc)
     
-    # Try to find NCX file
-    for item in book.get_items():
-        if item.get_type() == 3 or (item.file_name and item.file_name.lower().endswith('.ncx')):
-            try:
-                if debug:
-                    print(f"\nFound NCX file: {item.file_name}")
-                    print("\nNCX Content Preview:")
-                    print(item.content[:500])
-                
-                ncx_found = True
-                
-                # Parse NCX content
-                ns = {'ncx': 'http://www.daisy.org/z3986/2005/ncx/'}
-                root = ET.fromstring(item.content)
-                
-                # Find all navPoints
-                nav_points = root.findall('.//ncx:navPoint', ns)
-                if not nav_points:
-                    nav_points = root.findall('.//navPoint')
-                
-                if debug:
-                    print(f"\nFound {len(nav_points)} nav points")
-                
-                for nav in nav_points:
-                    try:
-                        play_order = int(nav.get('playOrder', 0))
-                        nav_label = nav.find('.//ncx:navLabel/ncx:text', ns)
-                        if nav_label is None:
-                            nav_label = nav.find('.//navLabel/text')
-                        
-                        if nav_label is not None:
-                            title = nav_label.text.strip()
-                        else:
-                            continue
-                        
-                        content = nav.find('.//ncx:content', ns)
-                        if content is None:
-                            content = nav.find('.//content')
-                        
-                        if content is not None:
-                            content_src = content.get('src', '')
-                        else:
-                            continue
-                        
-                        content_src = content_src.lower()
-                        base_name = os.path.basename(content_src)
-                        
-                        if debug:
-                            print(f"Found chapter: {play_order}. {title} -> {base_name}")
-                        
-                        chapter_titles[base_name] = {
-                            'order': play_order,
-                            'title': title
-                        }
-                    except Exception as e:
-                        if debug:
-                            print(f"Warning: Error processing nav point: {e}")
-                        continue
-                
-                if debug:
-                    print(f"\nProcessed {len(chapter_titles)} chapter titles")
+    def get_chapter_content(soup, start_id, next_id=None):
+        """Extract content between two fragment IDs"""
+        content = []
+        start_elem = soup.find(id=start_id)
+        
+        if not start_elem:
+            return ""
+        
+        # Skip the heading itself if it's a heading
+        if start_elem.name in ['h1', 'h2', 'h3', 'h4']:
+            current = start_elem.find_next_sibling()
+        else:
+            current = start_elem
+            
+        while current:
+            # Stop if we hit the next chapter
+            if next_id and current.get('id') == next_id:
                 break
-            except Exception as e:
+            # Stop if we hit another chapter heading
+            if current.name in ['h1', 'h2', 'h3'] and 'chapter' in current.get_text().lower():
+                break
+            content.append(current.get_text())
+            current = current.find_next_sibling()
+            
+        return '\n'.join(content).strip()
+    
+    def process_toc_items(items, depth=0):
+        processed = []
+        for i, item in enumerate(items):
+            if isinstance(item, tuple):
+                section_title, section_items = item
                 if debug:
-                    print(f"Warning: Error parsing NCX file: {e}")
-                    import traceback
-                    traceback.print_exc()
-                continue
-    
-    if not ncx_found and debug:
-        print("Warning: No NCX file found in EPUB!")
-    
-    # Process content files
-    if debug:
-        print("\nProcessing content files:")
-    
-    for item in book.get_items():
-        if item.get_type() == 9:  # Document files
-            try:
-                file_name = os.path.basename(item.file_name.lower())
-                
+                    print(f"{'  ' * depth}Processing section: {section_title}")
+                processed.extend(process_toc_items(section_items, depth + 1))
+            elif isinstance(item, epub.Link):
                 if debug:
-                    print(f"\nProcessing file: {file_name}")
+                    print(f"{'  ' * depth}Processing link: {item.title} -> {item.href}")
                 
-                content = item.get_content().decode('utf-8')
-                soup = BeautifulSoup(content, "html.parser")
-                text_content = soup.get_text().strip()
+                # Skip if title suggests it's front matter
+                if (item.title.lower() in ['copy', 'copyright', 'title page', 'cover'] or
+                    item.title.lower().startswith('by')):
+                    continue
                 
-                if text_content and file_name in chapter_titles:
-                    title = chapter_titles[file_name]['title']
-                    order = chapter_titles[file_name]['order']
+                # Extract the file name and fragment from href
+                href_parts = item.href.split('#')
+                file_name = href_parts[0]
+                fragment_id = href_parts[1] if len(href_parts) > 1 else None
+                
+                # Find the document
+                doc = next((doc for doc in book.get_items_of_type(ITEM_DOCUMENT) 
+                          if doc.file_name.endswith(file_name)), None)
+                
+                if doc:
+                    content = doc.get_content().decode('utf-8')
+                    soup = BeautifulSoup(content, "html.parser")
                     
-                    if title.lower() in ['copy', 'copyright']:
+                    # If no fragment ID, get whole document content
+                    if not fragment_id:
+                        text_content = soup.get_text().strip()
+                    else:
+                        # Get the next fragment ID if available
+                        next_item = items[i + 1] if i + 1 < len(items) else None
+                        next_fragment = None
+                        if isinstance(next_item, epub.Link):
+                            next_href_parts = next_item.href.split('#')
+                            if next_href_parts[0] == file_name and len(next_href_parts) > 1:
+                                next_fragment = next_href_parts[1]
+                        
+                        # Extract content between fragments
+                        text_content = get_chapter_content(soup, fragment_id, next_fragment)
+                    
+                    if text_content:
+                        chapters.append({
+                            'title': item.title,
+                            'content': text_content,
+                            'order': len(processed) + 1
+                        })
+                        processed.append(item)
                         if debug:
-                            print(f"Skipping: {title}")
-                        continue
-                    
-                    chapters.append({
-                        'title': title,
-                        'content': text_content,
-                        'order': order
-                    })
-                    if debug:
-                        print(f"Added chapter: {title}")
-                else:
-                    if debug:
-                        if not text_content:
-                            print(f"Skipping: {file_name} (no content)")
-                        elif file_name not in chapter_titles:
-                            print(f"Skipping: {file_name} (no matching title)")
-            except Exception as e:
-                if debug:
-                    print(f"Warning: Error processing content file: {e}")
-                    import traceback
-                    traceback.print_exc()
-                continue
+                            print(f"{'  ' * depth}Added chapter: {item.title}")
+                            print(f"{'  ' * depth}Content length: {len(text_content)} chars")
+                            print(f"{'  ' * depth}Word count: {len(text_content.split())}")
+        return processed
     
-    # Sort chapters by order
-    chapters.sort(key=lambda x: x['order'])
+    # Process the table of contents
+    process_toc_items(book.toc)
+    
+    # If no chapters were found through TOC, try processing all documents
+    if not chapters:
+        if debug:
+            print("\nNo chapters found in TOC, processing all documents...")
+        
+        # Get all document items sorted by file name
+        docs = sorted(
+            book.get_items_of_type(ITEM_DOCUMENT),
+            key=lambda x: x.file_name
+        )
+        
+        for doc in docs:
+            if debug:
+                print(f"Processing document: {doc.file_name}")
+            
+            content = doc.get_content().decode('utf-8')
+            soup = BeautifulSoup(content, "html.parser")
+            
+            # Try to find chapter divisions
+            chapter_divs = soup.find_all(['h1', 'h2', 'h3'], class_=lambda x: x and 'chapter' in x.lower())
+            if not chapter_divs:
+                chapter_divs = soup.find_all(lambda tag: tag.name in ['h1', 'h2', 'h3'] and 
+                                          ('chapter' in tag.get_text().lower() or
+                                           'book' in tag.get_text().lower()))
+            
+            if chapter_divs:
+                # Process each chapter division
+                for i, div in enumerate(chapter_divs):
+                    title = div.get_text().strip()
+                    
+                    # Get content until next chapter heading or end
+                    content = ''
+                    for tag in div.find_next_siblings():
+                        if tag.name in ['h1', 'h2', 'h3'] and (
+                            'chapter' in tag.get_text().lower() or
+                            'book' in tag.get_text().lower()):
+                            break
+                        content += tag.get_text() + '\n'
+                    
+                    if content.strip():
+                        chapters.append({
+                            'title': title,
+                            'content': content.strip(),
+                            'order': len(chapters) + 1
+                        })
+                        if debug:
+                            print(f"Added chapter: {title}")
+            else:
+                # No chapter divisions found, treat whole document as one chapter
+                text_content = soup.get_text().strip()
+                if text_content:
+                    # Try to find a title
+                    title_tag = soup.find(['h1', 'h2', 'title'])
+                    title = title_tag.get_text().strip() if title_tag else f"Chapter {len(chapters) + 1}"
+                    
+                    if title.lower() not in ['copy', 'copyright', 'title page', 'cover']:
+                        chapters.append({
+                            'title': title,
+                            'content': text_content,
+                            'order': len(chapters) + 1
+                        })
+                        if debug:
+                            print(f"Added chapter: {title}")
     
     # Print summary
     if chapters:
@@ -311,16 +354,24 @@ def extract_chapters_from_epub(epub_file, debug=False):
         print(f"Total Chapters: {len(chapters)}")
         print(f"Total Words: {total_words:,}")
         print(f"Total Duration: {total_words / 150:.1f} minutes")
+        
+        if debug:
+            print("\nDetailed Chapter List:")
+            for chapter in chapters:
+                word_count = len(chapter['content'].split())
+                print(f"  • {chapter['title']}")
+                print(f"    Words: {word_count:,}")
+                print(f"    Duration: {word_count / 150:.1f} minutes")
     else:
         print("\nWarning: No chapters were extracted!")
-        if chapter_titles and debug:
-            print("Available NCX entries:")
-            for src, info in chapter_titles.items():
-                print(f"  {info['order']}. {info['title']} ({src})")
+        if debug:
+            print("\nAvailable documents:")
+            for doc in book.get_items_of_type(ITEM_DOCUMENT):
+                print(f"  • {doc.file_name}")
     
     return chapters
 
-def process_chunk_sequential(chunk, kokoro, voice, speed, lang):
+def process_chunk_sequential(chunk: str, kokoro: Kokoro, voice: str, speed: float, lang: str) -> tuple[list[float] | None, int | None]:
     """Process a single chunk of text sequentially."""
     try:
         samples, sample_rate = kokoro.create(chunk, voice=voice, speed=speed, lang=lang)
