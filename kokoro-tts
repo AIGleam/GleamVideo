@@ -191,25 +191,21 @@ def extract_chapters_from_epub(epub_file, debug=False):
                 
                 ncx_found = True
                 
-                # Define XML namespaces
-                ns = {'ncx': 'http://www.daisy.org/z3986/2005/ncx/'}
-                
                 # Parse NCX content
+                ns = {'ncx': 'http://www.daisy.org/z3986/2005/ncx/'}
                 root = ET.fromstring(item.content)
                 
                 # Find all navPoints
                 nav_points = root.findall('.//ncx:navPoint', ns)
                 if not nav_points:
-                    # Try without namespace if not found
                     nav_points = root.findall('.//navPoint')
                 
-                print(f"\nFound {len(nav_points)} nav points")
+                if debug:
+                    print(f"\nFound {len(nav_points)} nav points")
                 
                 for nav in nav_points:
                     try:
                         play_order = int(nav.get('playOrder', 0))
-                        
-                        # Try with and without namespace
                         nav_label = nav.find('.//ncx:navLabel/ncx:text', ns)
                         if nav_label is None:
                             nav_label = nav.find('.//navLabel/text')
@@ -219,7 +215,6 @@ def extract_chapters_from_epub(epub_file, debug=False):
                         else:
                             continue
                         
-                        # Try with and without namespace
                         content = nav.find('.//ncx:content', ns)
                         if content is None:
                             content = nav.find('.//content')
@@ -229,55 +224,57 @@ def extract_chapters_from_epub(epub_file, debug=False):
                         else:
                             continue
                         
-                        # Clean up the content source path
                         content_src = content_src.lower()
                         base_name = os.path.basename(content_src)
                         
-                        print(f"Found chapter: {play_order}. {title} -> {base_name}")
+                        if debug:
+                            print(f"Found chapter: {play_order}. {title} -> {base_name}")
                         
                         chapter_titles[base_name] = {
                             'order': play_order,
                             'title': title
                         }
                     except Exception as e:
-                        print(f"Warning: Error processing nav point: {e}")
+                        if debug:
+                            print(f"Warning: Error processing nav point: {e}")
                         continue
                 
-                print(f"\nProcessed {len(chapter_titles)} chapter titles")
-                if chapter_titles:
-                    break
+                if debug:
+                    print(f"\nProcessed {len(chapter_titles)} chapter titles")
+                break
             except Exception as e:
-                print(f"Warning: Error parsing NCX file: {e}")
-                import traceback
-                traceback.print_exc()
+                if debug:
+                    print(f"Warning: Error parsing NCX file: {e}")
+                    import traceback
+                    traceback.print_exc()
                 continue
     
-    if not ncx_found:
+    if not ncx_found and debug:
         print("Warning: No NCX file found in EPUB!")
-    elif not chapter_titles:
-        print("Warning: No chapters found in NCX file!")
     
-    # Now process the actual content
-    print("\nProcessing content files:")
+    # Process content files
+    if debug:
+        print("\nProcessing content files:")
+    
     for item in book.get_items():
-        if item.get_type() == 9:  # 9 is for DOCUMENT/content files
+        if item.get_type() == 9:  # Document files
             try:
-                # Clean up the file name for matching
                 file_name = os.path.basename(item.file_name.lower())
                 
-                print(f"\nProcessing file: {file_name}")
+                if debug:
+                    print(f"\nProcessing file: {file_name}")
                 
                 content = item.get_content().decode('utf-8')
                 soup = BeautifulSoup(content, "html.parser")
                 text_content = soup.get_text().strip()
                 
-                if text_content and file_name in chapter_titles:  # Only add if there's content and matching title
+                if text_content and file_name in chapter_titles:
                     title = chapter_titles[file_name]['title']
                     order = chapter_titles[file_name]['order']
                     
-                    # Skip if this is not a main chapter (like copyright page)
                     if title.lower() in ['copy', 'copyright']:
-                        print(f"Skipping: {title}")
+                        if debug:
+                            print(f"Skipping: {title}")
                         continue
                     
                     chapters.append({
@@ -285,36 +282,41 @@ def extract_chapters_from_epub(epub_file, debug=False):
                         'content': text_content,
                         'order': order
                     })
-                    print(f"Added chapter: {title}")
+                    if debug:
+                        print(f"Added chapter: {title}")
                 else:
-                    if not text_content:
-                        print(f"Skipping: {file_name} (no content)")
-                    elif file_name not in chapter_titles:
-                        print(f"Skipping: {file_name} (no matching title)")
+                    if debug:
+                        if not text_content:
+                            print(f"Skipping: {file_name} (no content)")
+                        elif file_name not in chapter_titles:
+                            print(f"Skipping: {file_name} (no matching title)")
             except Exception as e:
-                print(f"Warning: Error processing content file: {e}")
-                import traceback
-                traceback.print_exc()
+                if debug:
+                    print(f"Warning: Error processing content file: {e}")
+                    import traceback
+                    traceback.print_exc()
                 continue
     
     # Sort chapters by order
     chapters.sort(key=lambda x: x['order'])
     
-    # Debug info
-    if not chapters:
+    # Print summary
+    if chapters:
+        print("\nSuccessfully extracted {} chapters:".format(len(chapters)))
+        for chapter in chapters:
+            print(f"  {chapter['order']}. {chapter['title']}")
+        
+        total_words = sum(len(chapter['content'].split()) for chapter in chapters)
+        print("\nBook Summary:")
+        print(f"Total Chapters: {len(chapters)}")
+        print(f"Total Words: {total_words:,}")
+        print(f"Total Duration: {total_words / 150:.1f} minutes")
+    else:
         print("\nWarning: No chapters were extracted!")
-        if chapter_titles:
+        if chapter_titles and debug:
             print("Available NCX entries:")
             for src, info in chapter_titles.items():
                 print(f"  {info['order']}. {info['title']} ({src})")
-            print("\nFound HTML files:")
-            for item in book.get_items():
-                if item.get_type() == 9:
-                    print(f"  {os.path.basename(item.file_name.lower())}")
-    else:
-        print(f"\nSuccessfully extracted {len(chapters)} chapters:")
-        for chapter in chapters:
-            print(f"  {chapter['order']}. {chapter['title']}")
     
     return chapters
 
