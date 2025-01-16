@@ -13,6 +13,7 @@ from ebooklib import epub
 from bs4 import BeautifulSoup
 import warnings
 from threading import Event
+import difflib
 
 warnings.filterwarnings("ignore", category=UserWarning, module='ebooklib')
 warnings.filterwarnings("ignore", category=FutureWarning, module='ebooklib')
@@ -254,20 +255,45 @@ def convert_text_to_audio(input_file, output_file=None, voice=None, speed=1.0, l
             os.makedirs(split_output, exist_ok=True)
             
             for chapter_num, chapter in enumerate(chapters, 1):
-                print(f"\nProcessing: {chapter['title']}")
                 chapter_dir = os.path.join(split_output, f"chapter_{chapter_num:03d}")
+                
+                # Skip if chapter is already fully processed
+                if os.path.exists(chapter_dir):
+                    info_file = os.path.join(chapter_dir, "info.txt")
+                    if os.path.exists(info_file):
+                        chunks = chunk_text(chapter['content'], chunk_size=2000)
+                        total_chunks = len(chunks)
+                        existing_chunks = len([f for f in os.listdir(chapter_dir) 
+                                            if f.startswith("chunk_") and f.endswith(f".{format}")])
+                        
+                        if existing_chunks == total_chunks:
+                            print(f"\nSkipping {chapter['title']}: Already completed ({existing_chunks} chunks)")
+                            continue
+                        else:
+                            print(f"\nResuming {chapter['title']}: Found {existing_chunks}/{total_chunks} chunks")
+
+                print(f"\nProcessing: {chapter['title']}")
                 os.makedirs(chapter_dir, exist_ok=True)
                 
-                with open(os.path.join(chapter_dir, "info.txt"), "w", encoding="utf-8") as f:
-                    f.write(f"Title: {chapter['title']}\n")
+                # Write chapter info if not exists
+                info_file = os.path.join(chapter_dir, "info.txt")
+                if not os.path.exists(info_file):
+                    with open(info_file, "w", encoding="utf-8") as f:
+                        f.write(f"Title: {chapter['title']}\n")
                 
                 chunks = chunk_text(chapter['content'], chunk_size=2000)
                 total_chunks = len(chunks)
-                processed_chunks = 0
+                processed_chunks = len([f for f in os.listdir(chapter_dir) 
+                                     if f.startswith("chunk_") and f.endswith(f".{format}")])
                 
                 for chunk_num, chunk in enumerate(chunks, 1):
                     if stop_audio:  # Check for interruption
                         break
+                    
+                    # Skip if chunk file already exists (regardless of position)
+                    chunk_file = os.path.join(chapter_dir, f"chunk_{chunk_num:03d}.{format}")
+                    if os.path.exists(chunk_file):
+                        continue  # Don't increment processed_chunks here since we counted them above
                     
                     # Create progress bar
                     filled = "■" * processed_chunks
@@ -284,7 +310,6 @@ def convert_text_to_audio(input_file, output_file=None, voice=None, speed=1.0, l
                     try:
                         samples, sample_rate = process_chunk_sequential(chunk, kokoro, voice, speed, lang)
                         if samples is not None:
-                            chunk_file = os.path.join(chapter_dir, f"chunk_{chunk_num:03d}.{format}")
                             sf.write(chunk_file, samples, sample_rate)
                             processed_chunks += 1
                     except Exception as e:
@@ -498,7 +523,52 @@ def merge_chunks_to_chapters(split_output_dir, format="wav"):
         else:
             print("No valid audio data to merge")
 
+def get_valid_options():
+    """Return a set of valid command line options"""
+    return {
+        '-h', '--help',
+        '--help-languages',
+        '--help-voices',
+        '--merge-chunks',
+        '--stream',
+        '--speed',
+        '--lang',
+        '--voice',
+        '--split-output',
+        '--format'
+    }
+
 if __name__ == "__main__":
+    # Validate command line options first
+    valid_options = get_valid_options()
+    unknown_options = []
+    
+    # Check for unknown options
+    i = 1
+    while i < len(sys.argv):
+        arg = sys.argv[i]
+        if arg.startswith('--') or arg.startswith('-'):
+            # Check if it's a valid option
+            if arg not in valid_options:
+                unknown_options.append(arg)
+            # Skip the next argument if it's a value for an option that takes parameters
+            elif arg in {'--speed', '--lang', '--voice', '--split-output', '--format'}:
+                i += 1
+        i += 1
+    
+    # If unknown options were found, show error and help
+    if unknown_options:
+        print("Error: Unknown option(s):", ", ".join(unknown_options))
+        print("\nDid you mean one of these?")
+        for unknown in unknown_options:
+            # Find similar valid options using string similarity
+            similar = difflib.get_close_matches(unknown, valid_options, n=3, cutoff=0.4)
+            if similar:
+                print(f"  {unknown} -> {', '.join(similar)}")
+        print("\n")  # Add extra newline for spacing
+        print_usage()  # Show the full help text
+        sys.exit(1)
+    
     # Handle help commands first
     if len(sys.argv) == 2:
         if sys.argv[1] in ['-h', '--help']:
