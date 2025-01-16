@@ -14,6 +14,8 @@ from bs4 import BeautifulSoup
 import warnings
 from threading import Event
 import difflib
+import xml.etree.ElementTree as ET
+import re
 
 warnings.filterwarnings("ignore", category=UserWarning, module='ebooklib')
 warnings.filterwarnings("ignore", category=FutureWarning, module='ebooklib')
@@ -111,6 +113,7 @@ Options:
     --voice <str>       Set voice (default: interactive selection)
     --split-output <dir> Save each chunk as separate file in directory
     --format <str>      Audio format: wav or mp3 (default: wav)
+    --debug             Show detailed debug information
 
 Input formats:
     .txt               Text file input
@@ -123,6 +126,7 @@ Examples:
     kokoro-tts --merge-chunks --split-output ./chunks/ --format wav
     kokoro-tts --help-voices
     kokoro-tts --help-languages
+    kokoro-tts input.epub --split-output ./chunks/ --debug
     """)
 
 def print_supported_languages():
@@ -163,33 +167,155 @@ def validate_voice(voice, kokoro):
         print(f"Error getting supported voices: {e}")
         sys.exit(1)
 
-def extract_chapters_from_epub(epub_file):
-    """Extract chapters from epub file with their titles."""
+def extract_chapters_from_epub(epub_file, debug=False):
+    """Extract chapters from epub file with their titles using NCX when available."""
     book = epub.read_epub(epub_file)
     chapters = []
+    chapter_titles = {}
     
+    # First try to get chapter titles from NCX
+    ncx_found = False
+    
+    if debug:
+        print("\nSearching for NCX file...")
+        for item in book.get_items():
+            print(f"Found item: {item.file_name} (type: {item.get_type()})")
+    
+    # Try to find NCX file
     for item in book.get_items():
-        if item.get_type() == 9:  # DOCUMENT type
-            soup = BeautifulSoup(item.get_body_content(), "html.parser")
-            
-            # Try to find chapter title from common heading patterns
-            title = None
-            for heading in soup.find_all(['h1', 'h2', 'h3']):
-                if heading.text.strip():
-                    title = heading.text.strip()
+        if item.get_type() == 3 or (item.file_name and item.file_name.lower().endswith('.ncx')):
+            try:
+                if debug:
+                    print(f"\nFound NCX file: {item.file_name}")
+                    print("\nNCX Content Preview:")
+                    print(item.content[:500])
+                
+                ncx_found = True
+                
+                # Define XML namespaces
+                ns = {'ncx': 'http://www.daisy.org/z3986/2005/ncx/'}
+                
+                # Parse NCX content
+                root = ET.fromstring(item.content)
+                
+                # Find all navPoints
+                nav_points = root.findall('.//ncx:navPoint', ns)
+                if not nav_points:
+                    # Try without namespace if not found
+                    nav_points = root.findall('.//navPoint')
+                
+                print(f"\nFound {len(nav_points)} nav points")
+                
+                for nav in nav_points:
+                    try:
+                        play_order = int(nav.get('playOrder', 0))
+                        
+                        # Try with and without namespace
+                        nav_label = nav.find('.//ncx:navLabel/ncx:text', ns)
+                        if nav_label is None:
+                            nav_label = nav.find('.//navLabel/text')
+                        
+                        if nav_label is not None:
+                            title = nav_label.text.strip()
+                        else:
+                            continue
+                        
+                        # Try with and without namespace
+                        content = nav.find('.//ncx:content', ns)
+                        if content is None:
+                            content = nav.find('.//content')
+                        
+                        if content is not None:
+                            content_src = content.get('src', '')
+                        else:
+                            continue
+                        
+                        # Clean up the content source path
+                        content_src = content_src.lower()
+                        base_name = os.path.basename(content_src)
+                        
+                        print(f"Found chapter: {play_order}. {title} -> {base_name}")
+                        
+                        chapter_titles[base_name] = {
+                            'order': play_order,
+                            'title': title
+                        }
+                    except Exception as e:
+                        print(f"Warning: Error processing nav point: {e}")
+                        continue
+                
+                print(f"\nProcessed {len(chapter_titles)} chapter titles")
+                if chapter_titles:
                     break
-            
-            # If no heading found, try to use item title or generate one
-            if not title:
-                title = getattr(item, 'title', None) or f"Chapter {len(chapters) + 1}"
-            
-            # Get chapter content
-            content = soup.get_text().strip()
-            if content:  # Only add if there's actual content
-                chapters.append({
-                    'title': title,
-                    'content': content
-                })
+            except Exception as e:
+                print(f"Warning: Error parsing NCX file: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+    
+    if not ncx_found:
+        print("Warning: No NCX file found in EPUB!")
+    elif not chapter_titles:
+        print("Warning: No chapters found in NCX file!")
+    
+    # Now process the actual content
+    print("\nProcessing content files:")
+    for item in book.get_items():
+        if item.get_type() == 9:  # 9 is for DOCUMENT/content files
+            try:
+                # Clean up the file name for matching
+                file_name = os.path.basename(item.file_name.lower())
+                
+                print(f"\nProcessing file: {file_name}")
+                
+                content = item.get_content().decode('utf-8')
+                soup = BeautifulSoup(content, "html.parser")
+                text_content = soup.get_text().strip()
+                
+                if text_content and file_name in chapter_titles:  # Only add if there's content and matching title
+                    title = chapter_titles[file_name]['title']
+                    order = chapter_titles[file_name]['order']
+                    
+                    # Skip if this is not a main chapter (like copyright page)
+                    if title.lower() in ['copy', 'copyright']:
+                        print(f"Skipping: {title}")
+                        continue
+                    
+                    chapters.append({
+                        'title': title,
+                        'content': text_content,
+                        'order': order
+                    })
+                    print(f"Added chapter: {title}")
+                else:
+                    if not text_content:
+                        print(f"Skipping: {file_name} (no content)")
+                    elif file_name not in chapter_titles:
+                        print(f"Skipping: {file_name} (no matching title)")
+            except Exception as e:
+                print(f"Warning: Error processing content file: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+    
+    # Sort chapters by order
+    chapters.sort(key=lambda x: x['order'])
+    
+    # Debug info
+    if not chapters:
+        print("\nWarning: No chapters were extracted!")
+        if chapter_titles:
+            print("Available NCX entries:")
+            for src, info in chapter_titles.items():
+                print(f"  {info['order']}. {info['title']} ({src})")
+            print("\nFound HTML files:")
+            for item in book.get_items():
+                if item.get_type() == 9:
+                    print(f"  {os.path.basename(item.file_name.lower())}")
+    else:
+        print(f"\nSuccessfully extracted {len(chapters)} chapters:")
+        for chapter in chapters:
+            print(f"  {chapter['order']}. {chapter['title']}")
     
     return chapters
 
@@ -203,7 +329,7 @@ def process_chunk_sequential(chunk, kokoro, voice, speed, lang):
         return None, None
 
 def convert_text_to_audio(input_file, output_file=None, voice=None, speed=1.0, lang="en-us", 
-                         stream=False, split_output=None, format="wav"):
+                         stream=False, split_output=None, format="wav", debug=False):
     global stop_spinner
     # Load Kokoro model
     try:
@@ -234,10 +360,49 @@ def convert_text_to_audio(input_file, output_file=None, voice=None, speed=1.0, l
     
     # Read the input file (handle .txt or .epub)
     if input_file.endswith('.epub'):
-        chapters = extract_chapters_from_epub(input_file)
+        chapters = extract_chapters_from_epub(input_file, debug)
         if not chapters:
             print("No chapters found in EPUB file.")
             sys.exit(1)
+            
+        # Print summary before starting
+        total_words = sum(len(chapter['content'].split()) for chapter in chapters)
+        print("\nBook Summary:")
+        print(f"Total Chapters: {len(chapters)}")
+        print(f"Total Words: {total_words:,}")
+        print(f"Total Duration: {total_words / 150:.1f} minutes")
+        
+        if debug:
+            print("\nDetailed Chapter List:")
+            for chapter in chapters:
+                word_count = len(chapter['content'].split())
+                print(f"  • {chapter['title']}")
+                print(f"    Words: {word_count:,}")
+                print(f"    Duration: {word_count / 150:.1f} minutes")
+        
+        print("\nPress Enter to start processing, or Ctrl+C to cancel...")
+        input()
+        
+        if split_output:
+            os.makedirs(split_output, exist_ok=True)
+            
+            # First create all chapter directories and info files
+            print("\nCreating chapter directories and info files...")
+            for chapter_num, chapter in enumerate(chapters, 1):
+                chapter_dir = os.path.join(split_output, f"chapter_{chapter_num:03d}")
+                os.makedirs(chapter_dir, exist_ok=True)
+                
+                # Write chapter info with more details
+                info_file = os.path.join(chapter_dir, "info.txt")
+                with open(info_file, "w", encoding="utf-8") as f:
+                    f.write(f"Title: {chapter['title']}\n")
+                    f.write(f"Order: {chapter['order']}\n")
+                    f.write(f"Words: {len(chapter['content'].split())}\n")
+                    f.write(f"Estimated Duration: {len(chapter['content'].split()) / 150:.1f} minutes\n")
+            
+            print("Created chapter directories and info files")
+            
+            # Continue with existing processing code...
     else:
         with open(input_file, 'r', encoding='utf-8') as file:
             text = file.read()
@@ -535,7 +700,8 @@ def get_valid_options():
         '--lang',
         '--voice',
         '--split-output',
-        '--format'
+        '--format',
+        '--debug'  # Add debug option
     }
 
 if __name__ == "__main__":
@@ -641,7 +807,11 @@ if __name__ == "__main__":
         print(f"Error: Output file must have .{format} extension.")
         sys.exit(1)
     
-    # Convert text to audio or stream
+    # Add debug flag
+    debug = '--debug' in sys.argv
+    
+    # Convert text to audio with debug flag
     convert_text_to_audio(input_file, output_file, voice=voice, stream=stream, 
-                         speed=speed, lang=lang, split_output=split_output, format=format)
+                         speed=speed, lang=lang, split_output=split_output, 
+                         format=format, debug=debug)
 
