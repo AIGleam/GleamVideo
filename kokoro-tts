@@ -15,7 +15,6 @@ import warnings
 from threading import Event
 import difflib
 import xml.etree.ElementTree as ET
-import re
 
 warnings.filterwarnings("ignore", category=UserWarning, module='ebooklib')
 warnings.filterwarnings("ignore", category=FutureWarning, module='ebooklib')

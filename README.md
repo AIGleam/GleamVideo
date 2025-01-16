@@ -11,6 +11,7 @@ A command-line text-to-speech tool using the Kokoro ONNX model, supporting multi
 - Adjustable speech speed
 - WAV and MP3 output formats
 - Chapter merging capability
+- Detailed debug output option
 
 ## Prerequisites
 
@@ -64,6 +65,7 @@ Basic usage:
 - `--voice <str>`: Set voice (default: interactive selection)
 - `--split-output <dir>`: Save each chunk as separate file in directory
 - `--format <str>`: Audio format: wav or mp3 (default: wav)
+- `--debug`: Show detailed debug information during processing
 
 ### Input Formats
 
@@ -85,6 +87,9 @@ kokoro-tts input.txt --stream --speed 0.8
 # Merge existing chunks
 kokoro-tts --merge-chunks --split-output ./chunks/ --format wav
 
+# Process EPUB with detailed debug output
+kokoro-tts input.epub --split-output ./chunks/ --debug
+
 # List available voices
 kokoro-tts --help-voices
 
@@ -98,6 +103,7 @@ kokoro-tts --help-languages
 - Automatically extracts chapters from EPUB files
 - Preserves chapter titles and structure
 - Creates organized output for each chapter
+- Detailed debug output available for troubleshooting
 
 ### Audio Processing
 - Chunks long text into manageable segments
@@ -110,6 +116,12 @@ kokoro-tts --help-languages
 - Split output with chapter organization
 - Chunk merging capability
 - Multiple audio format support
+
+### Debug Mode
+- Shows detailed information about file processing
+- Displays NCX parsing details for EPUB files
+- Lists all found chapters and their metadata
+- Helps troubleshoot processing issues
 
 ## Contributing
 
