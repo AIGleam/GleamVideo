@@ -417,21 +417,6 @@ def convert_text_to_audio(input_file, output_file=None, voice=None, speed=1.0, l
             print("No chapters found in EPUB file.")
             sys.exit(1)
             
-        # Print summary before starting
-        total_words = sum(len(chapter['content'].split()) for chapter in chapters)
-        print("\nBook Summary:")
-        print(f"Total Chapters: {len(chapters)}")
-        print(f"Total Words: {total_words:,}")
-        print(f"Total Duration: {total_words / 150:.1f} minutes")
-        
-        if debug:
-            print("\nDetailed Chapter List:")
-            for chapter in chapters:
-                word_count = len(chapter['content'].split())
-                print(f"  • {chapter['title']}")
-                print(f"    Words: {word_count:,}")
-                print(f"    Duration: {word_count / 150:.1f} minutes")
-        
         print("\nPress Enter to start processing, or Ctrl+C to cancel...")
         input()
         
