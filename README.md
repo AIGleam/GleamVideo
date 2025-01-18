@@ -1,6 +1,6 @@
 # Kokoro TTS
 
-A command-line text-to-speech tool using the Kokoro ONNX model, supporting multiple languages, voices, and various input formats including EPUB books.
+A CLI text-to-speech tool using the Kokoro model, supporting multiple languages, voices (with blending), and various input formats including EPUB books.
 
 ## Features
 
@@ -14,6 +14,12 @@ A command-line text-to-speech tool using the Kokoro ONNX model, supporting multi
 - Chapter merging capability
 - Detailed debug output option
 - GPU Support
+
+## TODO
+
+- [ ] Add GPU support
+- [ ] Add PDF support
+- [ ] Add GUI
 
 ## Prerequisites
 
