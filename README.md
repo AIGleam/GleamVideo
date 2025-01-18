@@ -17,7 +17,7 @@ A CLI text-to-speech tool using the Kokoro model, supporting multiple languages,
 
 ## TODO
 
-- [ ] Add GPU support
+- [x] Add GPU support
 - [ ] Add PDF support
 - [ ] Add GUI
 
