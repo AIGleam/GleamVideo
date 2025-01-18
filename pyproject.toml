@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "bs4>=0.0.2",
     "ebooklib>=0.18",
-    "kokoro-onnx>=0.2.6",
+    "kokoro-onnx>=0.3.3",
     "sounddevice>=0.5.1",
     "soundfile>=0.13.0",
 ]
