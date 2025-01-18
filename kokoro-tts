@@ -12,6 +12,7 @@ import warnings
 from threading import Event
 
 # Third-party imports
+import numpy as np
 from ebooklib import epub, ITEM_DOCUMENT
 from bs4 import BeautifulSoup
 import soundfile as sf
@@ -110,7 +111,7 @@ Options:
     --stream            Stream audio instead of saving to file
     --speed <float>     Set speech speed (default: 1.0)
     --lang <str>        Set language (default: en-us)
-    --voice <str>       Set voice (default: interactive selection)
+    --voice <str>       Set voice or blend voices (default: interactive selection)
     --split-output <dir> Save each chunk as separate file in directory
     --format <str>      Audio format: wav or mp3 (default: wav)
     --debug             Show detailed debug information
@@ -123,6 +124,8 @@ Examples:
     kokoro-tts input.txt output.wav --speed 1.2 --lang en-us --voice af_sarah
     kokoro-tts input.epub --split-output ./chunks/ --format mp3
     kokoro-tts input.txt --stream --speed 0.8
+    kokoro-tts input.txt output.wav --voice "af_sarah:60,am_adam:40"
+    kokoro-tts input.txt --stream --voice "am_adam,af_sarah" # 50-50 blend
     kokoro-tts --merge-chunks --split-output ./chunks/ --format wav
     kokoro-tts --help-voices
     kokoro-tts --help-languages
@@ -156,12 +159,53 @@ def print_supported_voices():
         sys.exit(1)
 
 def validate_voice(voice, kokoro):
-    """Validate if the voice is supported."""
+    """Validate if the voice is supported and handle voice blending.
+    
+    Format for blended voices: "voice1:weight,voice2:weight"
+    Example: "af_sarah:60,am_adam:40" for 60-40 blend
+    """
     try:
         supported_voices = set(kokoro.get_voices())
+        
+        # Parse comma seperated voices for blend
+        if ',' in voice:
+            voices = []
+            weights = []
+            
+            # Parse voice:weight pairs
+            for pair in voice.split(','):
+                if ':' in pair:
+                    v, w = pair.strip().split(':')
+                    voices.append(v.strip())
+                    weights.append(float(w.strip()))
+                else:
+                    voices.append(pair.strip())
+                    weights.append(50.0)  # Default to 50% if no weight specified
+            
+            if len(voices) != 2:
+                raise ValueError("voice blending needs two comma separated voices")
+                 
+            # Validate voice
+            for v in voices:
+                if v not in supported_voices:
+                    supported_voices_list = ', '.join(sorted(supported_voices))
+                    raise ValueError(f"Unsupported voice: {v}\nSupported voices are: {supported_voices_list}")
+             
+            # Normalize weights to sum to 100
+            total = sum(weights)
+            if total != 100:
+                weights = [w * (100/total) for w in weights]
+            
+            # Create voice blend style
+            style1 = kokoro.get_voice_style(voices[0])
+            style2 = kokoro.get_voice_style(voices[1])
+            blend = np.add(style1 * (weights[0]/100), style2 * (weights[1]/100))
+            return blend
+             
+        # Single voice validation
         if voice not in supported_voices:
-            supported_voices = ', '.join(sorted(supported_voices))
-            raise ValueError(f"Unsupported voice: {voice}\nSupported voices are: {supported_voices}")
+            supported_voices_list = ', '.join(sorted(supported_voices))
+            raise ValueError(f"Unsupported voice: {voice}\nSupported voices are: {supported_voices_list}")
         return voice
     except Exception as e:
         print(f"Error getting supported voices: {e}")
@@ -395,11 +439,43 @@ def convert_text_to_audio(input_file, output_file=None, voice=None, speed=1.0, l
         else:
             # Interactive voice selection
             voices = list_available_voices(kokoro)
+            print("\nHow to choose a voice:")
+            print("You can use either a single voice or blend two voices together.")
+            print("\nFor a single voice:")
+            print("  • Just enter one number (example: '7')")
+            print("\nFor blending two voices:")
+            print("  • Enter two numbers separated by comma")
+            print("  • Optionally add weights after each number using ':weight'")
+            print("\nExamples:")
+            print("  • '7'      - Use voice #7 only")
+            print("  • '7,11'   - Mix voices #7 and #11 equally (50% each)")
+            print("  • '7:60,11:40' - Mix 60% of voice #7 with 40% of voice #11")
             try:
-                voice_choice = int(input("Choose a voice by number: ")) - 1
-                if voice_choice < 0 or voice_choice >= len(voices):
-                    raise ValueError("Invalid choice")
-                voice = voices[voice_choice]
+                voice_input = input("Choose voice(s) by number: ")
+                if ',' in voice_input:
+                    # Handle blended voices
+                    pairs = []
+                    for pair in voice_input.split(','):
+                        if ':' in pair:
+                            num, weight = pair.strip().split(':')
+                            voice_idx = int(num.strip()) - 1
+                            if not (0 <= voice_idx < len(voices)):
+                                raise ValueError(f"Invalid voice number: {int(num)}")
+                            pairs.append(f"{voices[voice_idx]}:{weight}")
+                        else:
+                            voice_idx = int(pair.strip()) - 1
+                            if not (0 <= voice_idx < len(voices)):
+                                raise ValueError(f"Invalid voice number: {int(pair)}")
+                            pairs.append(voices[voice_idx])
+                    voice = ','.join(pairs)
+                else:
+                    # Single voice
+                    voice_choice = int(voice_input) - 1
+                    if not (0 <= voice_choice < len(voices)):
+                        raise ValueError("Invalid choice")
+                    voice = voices[voice_choice]
+                # Validate and potentially convert to blend
+                voice = validate_voice(voice, kokoro)
             except (ValueError, IndexError):
                 print("Invalid choice. Using default voice.")
                 voice = "af_sarah"  # default voice
@@ -705,7 +781,6 @@ def merge_chunks_to_chapters(split_output_dir, format="wav"):
             
             try:
                 # Ensure all_samples is a numpy array
-                import numpy as np
                 all_samples = np.array(all_samples)
                 
                 # Save merged audio

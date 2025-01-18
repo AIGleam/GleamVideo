@@ -5,6 +5,7 @@ A command-line text-to-speech tool using the Kokoro ONNX model, supporting multi
 ## Features
 
 - Multiple language and voice support
+- Voice blending with customizable weights
 - EPUB and TXT file input support
 - Streaming audio playback
 - Split output into chapters
@@ -63,7 +64,9 @@ Basic usage:
 - `--stream`: Stream audio instead of saving to file
 - `--speed <float>`: Set speech speed (default: 1.0)
 - `--lang <str>`: Set language (default: en-us)
-- `--voice <str>`: Set voice (default: interactive selection)
+- `--voice <str>`: Set voice or blend voices (default: interactive selection)
+  - Single voice: Use voice name (e.g., "af_sarah")
+  - Blended voices: Use "voice1:weight,voice2:weight" format
 - `--split-output <dir>`: Save each chunk as separate file in directory
 - `--format <str>`: Audio format: wav or mp3 (default: wav)
 - `--debug`: Show detailed debug information during processing
@@ -78,6 +81,12 @@ Basic usage:
 ```bash
 # Basic usage with output file
 kokoro-tts input.txt output.wav --speed 1.2 --lang en-us --voice af_sarah
+
+# Use voice blending (60-40 mix)
+kokoro-tts input.txt output.wav --voice "af_sarah:60,am_adam:40"
+
+# Use equal voice blend (50-50)
+kokoro-tts input.txt --stream --voice "am_adam,af_sarah"
 
 # Process EPUB and split into chunks
 kokoro-tts input.epub --split-output ./chunks/ --format mp3
@@ -109,6 +118,7 @@ kokoro-tts --help-languages
 ### Audio Processing
 - Chunks long text into manageable segments
 - Supports streaming for immediate playback
+- Voice blending with customizable mix ratios
 - Progress indicators for long processes
 - Handles interruptions gracefully
 
