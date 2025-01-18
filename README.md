@@ -12,6 +12,7 @@ A command-line text-to-speech tool using the Kokoro ONNX model, supporting multi
 - WAV and MP3 output formats
 - Chapter merging capability
 - Detailed debug output option
+- GPU Support
 
 ## Prerequisites
 
