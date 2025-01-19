@@ -5,8 +5,7 @@ build/
 dist/
 wheels/
 *.egg-info
-test.txt
-test.epub
+test.*
 # Virtual environments
 .venv
 # Generated audio files
