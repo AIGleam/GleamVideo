@@ -128,3 +128,9 @@ Licensed under the **MIT License**.
 
 ---
 🚀 **Author:** AI Gleam
+## 🌐 Connect with Me!
+
+🎥 **Livestream:** [Check out my stream on Twitch!](https://twitch.tv/aigleam)  
+💬 **Discord:** [Join the community!](https://discord.gg/g9btXmRY)  
+🐦 **Twitter/X:** [Follow me for updates!](https://x.com/AIGleam)  
+
