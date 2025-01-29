@@ -1,154 +1,130 @@
-# Kokoro TTS
+# GleamVideo - AI Video Generator
 
-A CLI text-to-speech tool using the Kokoro model, supporting multiple languages, voices (with blending), and various input formats including EPUB books.
+**A tool that automates video creation using AI-generated voiceovers and Ken Burns-style image transitions.**  
+🚀 **First version - Still in early development!**
 
-## Features
+---
 
-- Multiple language and voice support
-- Voice blending with customizable weights
-- EPUB and TXT file input support
-- Streaming audio playback
-- Split output into chapters
-- Adjustable speech speed
-- WAV and MP3 output formats
-- Chapter merging capability
-- Detailed debug output option
-- GPU Support
+## 📌 How to Use Tutorial:
+[![How to Use](https://img.youtube.com/vi/IGe9tGyIcH8/0.jpg)](https://www.youtube.com/watch?v=IGe9tGyIcH8)
 
-## TODO
+---
 
-- [x] Add GPU support
-- [ ] Add PDF support
-- [ ] Add GUI
+## 📽️ Demo Videos:
 
-## Prerequisites
+### Video 1:
+[![Video 1](https://img.youtube.com/vi/t9HFhj7VhuA/0.jpg)](https://www.youtube.com/watch?v=t9HFhj7VhuA)
 
-- Python 3.x
-- Required Python packages:
-  - soundfile
-  - sounddevice
-  - kokoro-onnx[gpu]
-  - ebooklib
-  - beautifulsoup4
+### Video 2:
+[![Video 2](https://img.youtube.com/vi/Vk5TUNNpF4M/0.jpg)](https://www.youtube.com/watch?v=Vk5TUNNpF4M)
 
-## Installation
+---
 
-1. Clone the repository:
-```bash
-git clone https://github.com/nazdridoy/kokoro-tts.git
-cd kokoro-tts
+## 🔥 Features
+
+✅ **Automated Video Generation** - Convert text paragraphs into AI-generated video.  
+✅ **Ken Burns Effect** - Smooth pan and zoom on background images or screenshots.  
+✅ **Custom AI Voices** - Modify TTS parameters for different styles.  
+✅ **Web-Based UI** - Easy-to-use FastAPI-powered interface.  
+✅ **Screenshot Integration** - Uses Selenium to grab website screenshots as video backgrounds.  
+
+🚨 **Current Limitations:**  
+❌ **Background music is currently broken.**  
+❌ **No AI text generation yet**, but you can use external AI tools for scripts.  
+
+---
+
+## 🛠️ Installation & Setup
+
+### **Prerequisites**
+- **Python 3.8+**
+- **FFmpeg** (for audio/video processing)
+- **Selenium & ChromeDriver** (for website screenshots)
+- **Required Python Packages** (see `requirements.txt`)
+- **Get the Onnx file you need wget https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files/kokoro-v0_19.onnx
+
+
+### **Clone the Repository**
+```sh
+git clone git@github.com:AIGleam/GleamVideo.git
+cd GleamVideo
 ```
 
-2. Install required packages:
-```bash
-pip install soundfile sounddevice "kokoro-onnx[gpu]" ebooklib beautifulsoup4
-```
-Note: You can also use `uv` as a faster alternative to pip for package installation. (This is a uv project)
-
-3. Download the required model files:
-```bash
-wget https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files/voices.json
-wget https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files/kokoro-v0_19.onnx
+### **Install Dependencies**
+```sh
+pip install -r requirements.txt
 ```
 
-## Usage
-
-Basic usage:
-```bash
-./kokoro-tts <input_text_file> [<output_audio_file>] [options]
+### **Run the Application**
+```sh
+python gleamvideo.py
 ```
+The app will start a web server at:  
+🌐 `http://localhost:8000`
 
-### Commands
+---
 
-- `-h, --help`: Show help message
-- `--help-languages`: List supported languages
-- `--help-voices`: List available voices
-- `--merge-chunks`: Merge existing chunks into chapter files
+## 🎬 Usage
 
-### Options
+1. Open `http://localhost:8000` in your browser.
+2. Enter text paragraphs to generate a voiceover.
+3. Add background images or URLs for screenshots.
+4. *(Optional)* Upload background music (not working yet).
+5. Click **Generate Video**.
+6. Your final video will be saved in the output folder.
 
-- `--stream`: Stream audio instead of saving to file
-- `--speed <float>`: Set speech speed (default: 1.0)
-- `--lang <str>`: Set language (default: en-us)
-- `--voice <str>`: Set voice or blend voices (default: interactive selection)
-  - Single voice: Use voice name (e.g., "af_sarah")
-  - Blended voices: Use "voice1:weight,voice2:weight" format
-- `--split-output <dir>`: Save each chunk as separate file in directory
-- `--format <str>`: Audio format: wav or mp3 (default: wav)
-- `--debug`: Show detailed debug information during processing
+---
 
-### Input Formats
+## 🎤 Customizing AI Voice
 
-- `.txt`: Text file input
-- `.epub`: EPUB book input (will process chapters)
-
-### Examples
-
-```bash
-# Basic usage with output file
-kokoro-tts input.txt output.wav --speed 1.2 --lang en-us --voice af_sarah
-
-# Use voice blending (60-40 mix)
-kokoro-tts input.txt output.wav --voice "af_sarah:60,am_adam:40"
-
-# Use equal voice blend (50-50)
-kokoro-tts input.txt --stream --voice "am_adam,af_sarah"
-
-# Process EPUB and split into chunks
-kokoro-tts input.epub --split-output ./chunks/ --format mp3
-
-# Stream audio directly
-kokoro-tts input.txt --stream --speed 0.8
-
-# Merge existing chunks
-kokoro-tts --merge-chunks --split-output ./chunks/ --format wav
-
-# Process EPUB with detailed debug output
-kokoro-tts input.epub --split-output ./chunks/ --debug
-
-# List available voices
-kokoro-tts --help-voices
-
-# List supported languages
-kokoro-tts --help-languages
+Modify `gleamvideo.py` to change the TTS voice:
+```python
+DEFAULT_VOICE = "am_adam"
+DEFAULT_LANGUAGE = "en-us"
+DEFAULT_SPEED = 1.2
 ```
+Change `DEFAULT_VOICE` to other supported voices.
 
-## Features in Detail
+---
 
-### EPUB Processing
-- Automatically extracts chapters from EPUB files
-- Preserves chapter titles and structure
-- Creates organized output for each chapter
-- Detailed debug output available for troubleshooting
+## 🛠 Troubleshooting
 
-### Audio Processing
-- Chunks long text into manageable segments
-- Supports streaming for immediate playback
-- Voice blending with customizable mix ratios
-- Progress indicators for long processes
-- Handles interruptions gracefully
+🔹 **No Video Output?** Ensure FFmpeg is installed.  
+🔹 **Voice Sounds Robotic?** Adjust `DEFAULT_SPEED` in TTS settings.  
+🔹 **Screenshots Not Working?** Make sure ChromeDriver matches your browser version.  
+🔹 **Background Music Not Adding?** This feature is currently broken.  
 
-### Output Options
-- Single file output
-- Split output with chapter organization
-- Chunk merging capability
-- Multiple audio format support
+---
 
-### Debug Mode
-- Shows detailed information about file processing
-- Displays NCX parsing details for EPUB files
-- Lists all found chapters and their metadata
-- Helps troubleshoot processing issues
+## 🔮 Roadmap
 
-## Contributing
+✅ **Basic AI video generation with TTS**  
+🚧 **Fix background music support** *(Planned)*  
+🚧 **Improve UI and add real-time preview** *(Planned)*  
+🚧 **Optional AI Integration with Ollama for Scripts+Titles+Descriptions** *(Planned)*  
+🚧 **Enhance video rendering speed** *(Planned)*  
 
-This is a project for personal use. But if you want to contribute, please feel free to submit a Pull Request.
+---
 
-## License
+## 🤝 Contributing
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+Fork this repo and submit pull requests!  
+Feedback and bug reports welcome.
 
-## Acknowledgments
+---
 
-- Kokoro ONNX model developers
-- Contributors to the dependent libraries
+## 📜 License
+
+Licensed under the **MIT License**.
+
+---
+
+## 💬 DISCLAIMER
+
+> I'm not a programmer, just a random stoner who makes things with AI and iterates on them.  
+> I hope this gives people ideas, and maybe others can improve it over time.  
+> Keep it Open Source and fun! If you get errors, paste them into Perplexity.ai for fixes.  
+> I tried to include everything in `requirements.txt`, but you know how that goes. **Lmao.**  
+
+---
+🚀 **Author:** AI Gleam
