@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AI-Assisted Video Editing (Dark Mode)</title>
+  <meta charset="utf-8">
+  <style>
+    /* ===== GLOBAL DARK THEME STYLES ===== */
+
+    body {
+      background-color: #121212;
+      color: #E0E0E0;
+      margin: 0;
+      padding: 0;
+      font-family: "Segoe UI", Roboto, Arial, sans-serif;
+    }
+    h1, h2, h3, h4 {
+      color: #f0f0f0;
+      margin-bottom: 8px;
+    }
+    p {
+      color: #ccc;
+      margin-bottom: 10px;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+      color: #ccc;
+    }
+    input[type=text], textarea, select {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      background-color: #2b2b2b;
+      color: #ccc;
+      border: 1px solid #444;
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+    button {
+      margin-top: 10px;
+      padding: 10px 15px;
+      background-color: #3f51b5;
+      border: none;
+      border-radius: 4px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    button:hover {
+      background-color: #5c6bc0;
+    }
+    .container {
+      max-width: 1400px;
+      margin: 40px auto;
+      padding: 20px;
+      background-color: #1e1e1e;
+      border-radius: 8px;
+    }
+    .section-block {
+      background-color: #242424;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 30px;
+    }
+    .heading-area {
+      margin-bottom: 15px;
+    }
+    .dynamic-fields {
+      margin-bottom: 10px;
+    }
+    .progress-area {
+      margin-top: 20px;
+      background-color: #2b2b2b;
+      padding: 10px;
+      border-radius: 4px;
+    }
+    .progress-bar-bg {
+      width: 100%;
+      background-color: #444;
+      height: 10px;
+      border-radius: 5px;
+      margin-top: 10px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background-color: #3f51b5;
+      width: 0%;
+    }
+    .info-text {
+      color: #888;
+      font-size: 0.85rem;
+    }
+
+    /* ===== LIST & DRAGGABLE ITEMS ===== */
+    .reorder-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      border: 1px solid #444;
+      border-radius: 4px;
+      min-height: 50px;
+      background-color: #2b2b2b;
+    }
+    .reorder-list li {
+      padding: 8px;
+      margin: 4px;
+      background-color: #333;
+      border-radius: 4px;
+      cursor: move;
+      display: flex;
+      align-items: center;
+    }
+    .reorder-handle {
+      margin-right: 10px;
+      color: #999;
+    }
+    .link-input {
+      flex: 1;
+      background: #444;
+      color: #ccc;
+      border: none;
+      border-radius: 4px;
+      padding: 6px;
+    }
+
+    /* ===== WAVEFORM & TIMELINE ===== */
+    #waveform {
+      margin-top: 20px;
+      background-color: #181818;
+      border-radius: 6px;
+    }
+    #markersList {
+      margin-top: 15px;
+      border: 1px solid #444;
+      min-height: 30px;
+      padding: 5px;
+      background-color: #2b2b2b;
+      border-radius: 4px;
+    }
+    .marker-item {
+      background-color: #333;
+      padding: 5px;
+      margin: 4px 0;
+      border-radius: 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .marker-time {
+      font-weight: bold;
+      font-size: 0.9rem;
+    }
+    .marker-remove-btn {
+      background-color: #d32f2f;
+      color: #fff;
+      border: none;
+      padding: 4px 6px;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 0.8rem;
+    }
+    .marker-remove-btn:hover {
+      background-color: #f44336;
+    }
+
+    /* ===== TIMELINE VISUAL EDITOR (EXAMPLE) ===== */
+    .timeline-editor {
+      margin-top: 20px;
+      background-color: #2b2b2b;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 10px;
+    }
+    .timeline-track {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+      background-color: #222;
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+    .timeline-segment {
+      flex: 1;
+      padding: 6px;
+      background-color: #3a3a3a;
+      margin: 2px;
+      text-align: center;
+      color: #ccc;
+      font-size: 0.8rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .timeline-segment:hover {
+      background-color: #505050;
+    }
+    .timeline-segment.selected {
+      background-color: #3f51b5;
+      color: #fff;
+    }
+
+    /* ===== SMALL UTILITY BUTTONS ===== */
+    .button-inline {
+      display: inline-block;
+      margin-top: 0;
+      margin-left: 10px;
+    }
+
+    /* Responsive tweak */
+    @media (max-width: 768px) {
+      .container {
+        margin: 20px auto;
+        padding: 10px;
+      }
+      .timeline-editor {
+        overflow-x: auto;
+      }
+    }
+  </style>
+  <!-- Wavesurfer for audio waveform -->
+  <script src="https://unpkg.com/wavesurfer.js"></script>
+</head>
+<body>
+<div class="container">
+  <div class="heading-area">
+    <h1>AI-Assisted Video Editor (Dark Mode UI)</h1>
+    <p>
+      A fully featured, <strong>CapCut/Premiere-like</strong> editor in the browser.  
+      Supports:
+      <ul style="padding-left: 20px;">
+        <li>Manual or auto script generation (scraping & OCR + LLM)</li>
+        <li>Paragraph-based timeline editing</li>
+        <li>Background images/links for each paragraph</li>
+        <li>Wavesurfer audio waveform + marker-based transitions</li>
+        <li>1080p portrait or landscape output</li>
+        <li>Optional background music merging</li>
+      </ul>
+      This UI communicates with our FastAPI backend to produce the final Ken Burns video.
+    </p>
+  </div>
+
+  <!-- ===== AUTO GENERATION SECTION ===== -->
+  <div class="section-block">
+    <h2>1. Auto-Generate Script (Optional)</h2>
+    <p>Provide URLs or image paths (one per line). We'll scrape or OCR, then call the LLM for script generation.</p>
+    <textarea id="autoItems" rows="3" placeholder="e.g. https://some-article.com&#10;      or path/to/image.jpg"></textarea>
+    <div style="display: flex; gap: 10px; margin-top: 10px;">
+      <div>
+        <label>Style</label>
+        <select id="autoStyle">
+          <option value="formal">Formal</option>
+          <option value="conversational">Conversational</option>
+          <option value="educational">Educational</option>
+        </select>
+      </div>
+      <div>
+        <label>Prompt Type</label>
+        <select id="autoPromptType">
+          <option value="Create educational narrative">Create educational narrative</option>
+          <option value="Explain key concepts">Explain key concepts</option>
+          <option value="Summarize main points">Summarize main points</option>
+          <option value="Create engaging introduction">Create engaging introduction</option>
+        </select>
+      </div>
+    </div>
+    <button id="autoGenButton">Auto Generate Script</button>
+    <span id="autoGenStatus" style="margin-left: 10px; color: #ccc;"></span>
+  </div>
+
+  <!-- ===== PARAGRAPHS SECTION ===== -->
+  <div class="section-block">
+    <h2>2. Script Paragraphs (Manual or Auto)</h2>
+    <p>Each paragraph becomes one segment in the final video timeline. Reorder them if needed, or add more.</p>
+    <div id="paragraphsContainer">
+      <div class="dynamic-fields">
+        <textarea name="paragraphs" rows="3" placeholder="Enter script paragraph here"></textarea>
+      </div>
+    </div>
+    <button id="addParagraphBtn">+ Add Paragraph</button>
+    <p class="info-text">You can also drop a .txt file here (or in an advanced UI) to auto-populate.</p>
+  </div>
+
+  <!-- ===== BACKGROUNDS SECTION ===== -->
+  <div class="section-block">
+    <h2>3. Backgrounds (Links or Images)</h2>
+    <p>Provide as many backgrounds as you have paragraphs. Each background matches a paragraph by index. Drag to reorder if needed.</p>
+    <ul class="reorder-list" id="linksList">
+      <li draggable="true">
+        <span class="reorder-handle">&#9776;</span>
+        <input type="text" class="link-input" placeholder="Link or image path" />
+      </li>
+    </ul>
+    <button id="addBackgroundBtn">+ Add Background</button>
+    <div id="hiddenLinks"></div>
+  </div>
+
+  <!-- ===== TIMELINE VISUAL EDITOR SECTION (Optional Advanced Demo) ===== -->
+  <div class="section-block">
+    <h2>4. Timeline Visual Editor</h2>
+    <p>
+      (Optional) A mock timeline for segments. Each segment corresponds to a paragraph + background.
+      Click a segment to select it, drag them around, etc. (Demo concept—real logic is in your JS.)
+    </p>
+    <div class="timeline-editor" id="timelineEditor">
+      <!-- We'll dynamically fill tracks for each paragraph or background item. -->
+      <div id="timelineTrack" class="timeline-track">
+        <!-- timeline segments appear here dynamically -->
+      </div>
+    </div>
+    <p class="info-text">
+      In a real app, you'd have separate tracks for video, transitions, overlays, etc.
+      This is just a conceptual example for a single track + segments.
+    </p>
+  </div>
+
+  <!-- ===== AUDIO TIMELINE SECTION ===== -->
+  <div class="section-block">
+    <h2>5. Audio Timeline &amp; Markers</h2>
+    <p>Once TTS is generated, the audio is loaded below. Use "Add Marker" to set transition breakpoints.</p>
+    <div style="background: #2b2b2b; padding: 10px; border-radius: 4px;">
+      <div>
+        <button id="togglePlayBtn">Play/Pause</button>
+        <button id="addMarkerBtn">Add Marker</button>
+      </div>
+      <div id="waveform"></div>
+      <div id="markersList"></div>
+    </div>
+    <p class="info-text">
+      Markers can define each segment's duration or transition. 
+      The backend can interpret these times as durations for your Ken Burns effect.
+    </p>
+  </div>
+
+  <!-- ===== FINAL GENERATION SECTION ===== -->
+  <div class="section-block">
+    <h2>6. Final Video Generation</h2>
+    <form id="genForm">
+      <!-- Folder picking (Ubuntu) -->
+      <label>Output Folder</label>
+      <div style="display: flex; gap: 10px;">
+        <input type="file" webkitdirectory directory multiple style="display:none" id="folderPicker" />
+        <input type="text" name="output_folder" id="outputFolder" placeholder="/home/ubuntu/videos" style="flex: 1;" />
+        <button type="button" id="pickFolderBtn">Select Folder</button>
+      </div>
+
+      <label>Output Video Name</label>
+      <input type="text" name="output_name" id="outputName" placeholder="myvideo.mp4" />
+
+      <label>Choose Orientation (1080p)</label>
+      <select name="resolution" id="resolutionSelect">
+        <option value="1920x1080">Landscape (1920x1080)</option>
+        <option value="1080x1920">Portrait (1080x1920)</option>
+      </select>
+
+      <label>Uniform Transition Duration (seconds) (Optional)</label>
+      <input type="text" name="transition_duration" id="transitionDuration" placeholder="Leave blank if using markers" />
+
+      <label>Background Music (.mp3 Optional)</label>
+      <input type="file" name="bg_music" id="bgMusicInput" accept=".mp3,audio/mpeg" />
+
+      <input type="hidden" name="timestamps" id="markerTimestamps" />
+      <div class="progress-area">
+        <div id="progressMessage">Idle...</div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill"></div>
+        </div>
+      </div>
+      <button type="submit" id="generateVideoBtn">Generate Final Video</button>
+    </form>
+  </div>
+
+</div>
+
+<script>
+// =========================================================
+//  Global Vars: WaveSurfer, Markers, and Draggable logic
+// =========================================================
+
+let waveSurfer = null;
+let audioTimestamps = []; // user-defined marker times
+let selectedSegmentIndex = null; // For the timeline track mock
+// We'll store references to paragraph textareas, background inputs, etc.
+
+// =========================================================
+//  Page Setup
+// =========================================================
+
+window.addEventListener("DOMContentLoaded", () => {
+  enableReorderFeatures();
+  initWaveSurfer();
+  wireUpButtons();
+  buildTimelineTrack(); // create a basic track for demonstration
+});
+
+function wireUpButtons() {
+  // Auto generation
+  const autoGenButton = document.getElementById("autoGenButton");
+  autoGenButton.addEventListener("click", autoGenerateScript);
+
+  // Add paragraph
+  const addParagraphBtn = document.getElementById("addParagraphBtn");
+  addParagraphBtn.addEventListener("click", addParagraph);
+
+  // Add background
+  const addBackgroundBtn = document.getElementById("addBackgroundBtn");
+  addBackgroundBtn.addEventListener("click", addBackgroundSegment);
+
+  // Timeline marker
+  const togglePlayBtn = document.getElementById("togglePlayBtn");
+  togglePlayBtn.addEventListener("click", togglePlay);
+
+  const addMarkerBtn = document.getElementById("addMarkerBtn");
+  addMarkerBtn.addEventListener("click", addMarker);
+
+  // Folder picking
+  const pickFolderBtn = document.getElementById("pickFolderBtn");
+  pickFolderBtn.addEventListener("click", () => {
+    document.getElementById("folderPicker").click();
+  });
+  document.getElementById("folderPicker").addEventListener("change", folderPicked);
+
+  // Submit final video
+  const genForm = document.getElementById("genForm");
+  genForm.addEventListener("submit", generateVideo);
+}
+
+// =========================================================
+//  Reorderable backgrounds logic
+// =========================================================
+let dragSrcEl = null;
+
+function handleDragStart(e) {
+  dragSrcEl = this;
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/html", this.innerHTML);
+}
+function handleDragEnter(e) {
+  this.classList.add("over");
+}
+function handleDragLeave(e) {
+  this.classList.remove("over");
+}
+function handleDragOver(e) {
+  if (e.preventDefault) e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  return false;
+}
+function handleDropReorder(e) {
+  if (e.stopPropagation) e.stopPropagation();
+  if (dragSrcEl != this) {
+    let tmp = dragSrcEl.innerHTML;
+    dragSrcEl.innerHTML = this.innerHTML;
+    this.innerHTML = tmp;
+  }
+  return false;
+}
+function handleDragEnd(e) {
+  let items = document.querySelectorAll(".reorder-list li");
+  items.forEach(it => {
+    it.classList.remove("over");
+  });
+}
+
+function enableReorderFeatures() {
+  let items = document.querySelectorAll(".reorder-list li");
+  items.forEach(item => {
+    item.setAttribute("draggable","true");
+    item.addEventListener("dragstart", handleDragStart, false);
+    item.addEventListener("dragenter", handleDragEnter, false);
+    item.addEventListener("dragover", handleDragOver, false);
+    item.addEventListener("dragleave", handleDragLeave, false);
+    item.addEventListener("drop", handleDropReorder, false);
+    item.addEventListener("dragend", handleDragEnd, false);
+  });
+}
+
+function addBackgroundSegment() {
+  const list = document.getElementById("linksList");
+  const li = document.createElement("li");
+  li.innerHTML = '<span class="reorder-handle">&#9776;</span>' +
+                 '<input type="text" class="link-input" placeholder="Link or image path"/>';
+  list.appendChild(li);
+  enableReorderFeatures();
+}
+
+// =========================================================
+//  Paragraph logic
+// =========================================================
+function addParagraph() {
+  const container = document.getElementById("paragraphsContainer");
+  const div = document.createElement("div");
+  div.classList.add("dynamic-fields");
+  div.innerHTML = `<textarea name="paragraphs" rows="3" placeholder="Enter script paragraph here"></textarea>`;
+  container.appendChild(div);
+}
+
+// =========================================================
+//  Folder picking logic (Ubuntu style) 
+// =========================================================
+function folderPicked(evt) {
+  const files = evt.target.files;
+  if (files.length > 0) {
+    let folderPath = files[0].webkitRelativePath;
+    if (folderPath.indexOf("/") > -1) {
+      folderPath = folderPath.split("/")[0];
+    }
+    document.getElementById("outputFolder").value = folderPath || "";
+  }
+}
+
+// =========================================================
+//  WaveSurfer & Marker Logic
+// =========================================================
+function initWaveSurfer() {
+  waveSurfer = WaveSurfer.create({
+    container: "#waveform",
+    waveColor: "violet",
+    progressColor: "purple",
+    height: 90
+  });
+  // Attempt to load the last TTS from our backend
+  waveSurfer.load("/temp_tts_audio");
+  waveSurfer.on("ready", () => {
+    console.log("WaveSurfer loaded. Duration =", waveSurfer.getDuration());
+  });
+}
+
+function togglePlay() {
+  if(waveSurfer) {
+    waveSurfer.playPause();
+  }
+}
+
+function addMarker() {
+  if(!waveSurfer) return;
+  const currentTime = waveSurfer.getCurrentTime();
+  audioTimestamps.push(parseFloat(currentTime.toFixed(2)));
+  renderMarkers();
+}
+
+function renderMarkers() {
+  audioTimestamps.sort((a,b)=>a-b);
+  const list = document.getElementById("markersList");
+  list.innerHTML = "";
+  audioTimestamps.forEach((ts, idx)=>{
+    const div = document.createElement("div");
+    div.classList.add("marker-item");
+    div.innerHTML = `
+      <span class="marker-time">${ts.toFixed(2)}s</span>
+      <button class="marker-remove-btn" onclick="removeMarker(${idx})">Remove</button>
+    `;
+    list.appendChild(div);
+  });
+}
+
+function removeMarker(index) {
+  audioTimestamps.splice(index,1);
+  renderMarkers();
+}
+
+// =========================================================
+//  TIMELINE VISUAL EDITOR (DEMO ONLY)
+// =========================================================
+function buildTimelineTrack() {
+  // For demonstration, let's build segments that correspond
+  // to the paragraphs. We'll do a simple row of blocks.
+  const track = document.getElementById("timelineTrack");
+  track.innerHTML = "";
+  const paragraphs = document.querySelectorAll("#paragraphsContainer textarea");
+  paragraphs.forEach((para, index) => {
+    const seg = document.createElement("div");
+    seg.classList.add("timeline-segment");
+    seg.innerText = `Segment ${index+1}`;
+    seg.onclick = () => selectSegment(index);
+    track.appendChild(seg);
+  });
+}
+
+function selectSegment(index) {
+  selectedSegmentIndex = index;
+  const segs = document.querySelectorAll(".timeline-segment");
+  segs.forEach((s, i)=>{
+    s.classList.remove("selected");
+    if(i === index) {
+      s.classList.add("selected");
+    }
+  });
+  console.log("Selected timeline segment index:", index);
+}
+
+// We'll re-run this if paragraphs are changed or re-ordered. 
+// (In a real app, you'd track reordering events, etc.)
+
+// =========================================================
+//  AUTO GENERATION (Scraping/OCR + LLM)
+// =========================================================
+async function autoGenerateScript() {
+  const itemsText = document.getElementById("autoItems").value;
+  const items = itemsText.split("\n").map(x=>x.trim()).filter(x=>x);
+  if(items.length===0){
+    alert("No items provided for auto-generation.");
+    return;
+  }
+  const styleVal = document.getElementById("autoStyle").value;
+  const promptVal = document.getElementById("autoPromptType").value;
+
+  const payload = {
+    items: items,
+    style: styleVal,
+    prompt_type: promptVal
+  };
+  const statusEl = document.getElementById("autoGenStatus");
+  statusEl.innerText = "Analyzing...";
+
+  try {
+    const resp = await fetch("/analyze_content", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(payload)
+    });
+    if(!resp.ok) {
+      statusEl.innerText = "Error from server.";
+      return;
+    }
+    const data = await resp.json();
+    if(data.error) {
+      statusEl.innerText = "Error: "+data.error;
+      return;
+    }
+    // data.paragraphs => array of generated paragraphs
+    const paragraphs = data.paragraphs || [];
+
+    const container = document.getElementById("paragraphsContainer");
+    container.innerHTML = "";
+    paragraphs.forEach(pg=>{
+      const div = document.createElement("div");
+      div.classList.add("dynamic-fields");
+      div.innerHTML = `<textarea name="paragraphs" rows="3">${pg}</textarea>`;
+      container.appendChild(div);
+    });
+    statusEl.innerText = "Success. Edit paragraphs if needed.";
+
+    // Rebuild timeline segments
+    buildTimelineTrack();
+  } catch(err) {
+    console.error(err);
+    statusEl.innerText = "Exception in auto generate script.";
+  }
+}
+
+// =========================================================
+//  FINAL VIDEO GENERATION
+// =========================================================
+async function generateVideo(e) {
+  e.preventDefault();
+  // gather paragraphs
+  const paragraphsEls = document.querySelectorAll("#paragraphsContainer textarea");
+  const linksEls = document.querySelectorAll("#linksList li .link-input");
+
+  // put them in hidden form fields
+  const hiddenLinks = document.getElementById("hiddenLinks");
+  hiddenLinks.innerHTML = "";
+  linksEls.forEach(linkInput=>{
+    const val = linkInput.value;
+    const inputEl = document.createElement("input");
+    inputEl.type = "hidden";
+    inputEl.name = "links";
+    inputEl.value = val;
+    hiddenLinks.appendChild(inputEl);
+  });
+
+  // store timestamps in hidden input
+  document.getElementById("markerTimestamps").value = audioTimestamps.join(",");
+
+  // Show starting progress
+  document.getElementById("progressMessage").innerText="Starting...";
+  document.querySelector(".progress-bar-fill").style.width="0%";
+
+  // Actually send form data 
+  const formEl = document.getElementById("genForm");
+  const formData = new FormData(formEl);
+
+  // We also need to attach the paragraphs. 
+  paragraphsEls.forEach( pEl => {
+    const pVal = pEl.value;
+    formData.append("paragraphs", pVal);
+  });
+
+  try {
+    const resp = await fetch("/generate_video", {
+      method: "POST",
+      body: formData
+    });
+    if(!resp.ok){
+      alert("Video generation request failed. Check logs or server console.");
+      return;
+    }
+    const data = await resp.json();
+    if(data.error){
+      alert("Error: "+data.error);
+      return;
+    }
+    pollProgress(data.task_id);
+  } catch(err){
+    console.error("Generate video error:", err);
+    alert("Exception in generating video. See console for details.");
+  }
+}
+
+let pollInterval = null;
+async function pollProgress(taskId){
+  if(pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(async ()=>{
+    const r = await fetch("/progress?task_id="+taskId);
+    if(!r.ok) return;
+    const info = await r.json();
+    document.getElementById("progressMessage").innerText = info.message;
+    document.querySelector(".progress-bar-fill").style.width = info.pct + "%";
+    if(info.status==="done"){
+      clearInterval(pollInterval);
+      document.getElementById("progressMessage").innerText = "Done! "+info.message;
+    } else if(info.status==="error"){
+      clearInterval(pollInterval);
+      document.getElementById("progressMessage").innerText = "Error: "+info.message;
+    }
+  }, 1000);
+}
+
+</script>
+</body>
+</html>
+
