@@ -120,8 +120,7 @@ Licensed under the **MIT License**.
 ---
 
 ## 💬 DISCLAIMER
-
-> I'm not a programmer, just a random stoner who makes things with AI and iterates on them.  
+ 
 > I hope this gives people ideas, and maybe others can improve it over time.  
 > Keep it Open Source and fun! If you get errors, paste them into Perplexity.ai for fixes.  
 > I tried to include everything in `requirements.txt`, but you know how that goes. **Lmao.**  
