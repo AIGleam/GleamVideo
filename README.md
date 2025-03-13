@@ -119,17 +119,3 @@ Licensed under the **MIT License**.
 
 ---
 
-## 💬 DISCLAIMER
- 
-> I hope this gives people ideas, and maybe others can improve it over time.  
-> Keep it Open Source and fun! If you get errors, paste them into Perplexity.ai for fixes.  
-> I tried to include everything in `requirements.txt`, but you know how that goes. **Lmao.**  
-
----
-🚀 **Author:** AI Gleam
-## 🌐 Connect with Me!
-
-🎥 **Livestream:** [Check out my stream on Twitch!](https://twitch.tv/aigleam)  
-💬 **Discord:** [Join the community!](https://discord.gg/g9btXmRY)  
-🐦 **Twitter/X:** [Follow me for updates!](https://x.com/AIGleam)  
-
