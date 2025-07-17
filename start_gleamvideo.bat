@@ -25,12 +25,34 @@ if %errorlevel% neq 0 (
 echo ✅ pip found
 echo.
 
+REM Check for FFmpeg
+ffmpeg -version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ⚠️ FFmpeg not found. Video generation may not work properly.
+    echo Please install FFmpeg from https://ffmpeg.org/download.html
+    echo and add it to your PATH.
+    echo.
+    echo Press any key to continue anyway...
+    pause >nul
+) else (
+    echo ✅ FFmpeg found
+)
+echo.
+
 REM Install dependencies
 echo 📦 Installing/checking dependencies...
-pip install fastapi uvicorn python-multipart aiohttp opencv-python-headless pillow pytz selenium pydantic requests beautifulsoup4 feedparser openai webdriver-manager
+pip install --upgrade fastapi uvicorn[standard] python-multipart aiohttp aiofiles opencv-python-headless pillow pytz selenium pydantic requests beautifulsoup4 feedparser openai webdriver-manager numpy soundfile
 
 if %errorlevel% neq 0 (
-    echo ⚠️ Some packages may have failed to install. Continuing anyway...
+    echo ⚠️ Some packages may have failed to install. Trying with --user flag...
+    pip install --user --upgrade fastapi uvicorn[standard] python-multipart aiohttp aiofiles opencv-python-headless pillow pytz selenium pydantic requests beautifulsoup4 feedparser openai webdriver-manager numpy soundfile
+)
+
+REM Try to install optional TTS support
+echo 📦 Installing optional TTS support...
+pip install kokoro-onnx >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ⚠️ Kokoro TTS not available. TTS features will use fallback mode.
 )
 echo.
 
@@ -40,6 +62,20 @@ if not exist "videos" mkdir videos
 if not exist "screenshots" mkdir screenshots
 if not exist "temp" mkdir temp
 echo ✅ Directories created
+echo.
+
+REM Check for Firefox browser
+echo 🦊 Checking for Firefox browser...
+if exist "C:\Program Files\Mozilla Firefox\firefox.exe" (
+    echo ✅ Firefox found
+) else if exist "C:\Program Files (x86)\Mozilla Firefox\firefox.exe" (
+    echo ✅ Firefox found
+) else (
+    echo ⚠️ Firefox not found. Please install Firefox for best screenshot compatibility.
+    echo Download from: https://firefox.com
+    echo Press any key to continue...
+    pause >nul
+)
 echo.
 
 REM Check for existing process
@@ -60,7 +96,7 @@ echo.
 start /B python gleamvideo.py
 
 REM Wait for startup
-timeout /t 5 /nobreak >nul
+timeout /t 8 /nobreak >nul
 
 REM Check if application is responding
 curl -s http://localhost:8000/progress >nul 2>&1
@@ -74,7 +110,7 @@ if %errorlevel% equ 0 (
     echo 📋 Quick Start Guide:
     echo   1. Open http://localhost:8000 in your browser
     echo   2. Configure your OpenRouter API key for Gemini 2.5 Flash
-    echo   3. Set up Auto Mode with your preferred subreddit
+    echo   3. Set up Auto Mode with your preferred settings
     echo   4. Start generating amazing videos!
     echo.
     echo 🛑 To stop: Close this window or press Ctrl+C
@@ -86,12 +122,23 @@ if %errorlevel% equ 0 (
     pause >nul
 ) else (
     echo ❌ Failed to start the application. 
-    echo Please check for error messages above and ensure all dependencies are installed.
     echo.
-    echo Common solutions:
-    echo - Install Firefox browser
-    echo - Install FFmpeg from https://ffmpeg.org/download.html
-    echo - Run as Administrator if needed
+    echo 🔧 Troubleshooting checklist:
+    echo   ✓ Python 3.8+ installed
+    echo   ✓ All dependencies installed
+    echo   ✓ FFmpeg available in PATH
+    echo   ✓ Firefox browser installed
+    echo   ✓ Port 8000 is available
+    echo   ✓ Run as Administrator if needed
+    echo.
+    echo 📝 Common solutions:
+    echo   - Restart your command prompt as Administrator
+    echo   - Install Visual Studio Build Tools if using conda
+    echo   - Check Windows Defender/Antivirus settings
+    echo   - Ensure no other applications are using port 8000
+    echo.
+    echo 📋 Manual start command:
+    echo   python gleamvideo.py
     echo.
     pause
 )

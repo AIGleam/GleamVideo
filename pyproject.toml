@@ -1,13 +1,54 @@
 [project]
-name = "xxx"
-version = "0.1.0"
-description = "Add your description here"
+name = "gleamvideo-enhanced"
+version = "2.0.0"
+description = "AI-Powered Video Generation Platform with advanced automation features"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.8"
 dependencies = [
-    "beautifulsoup4>=4.12.3",
-    "ebooklib>=0.18",
-    "kokoro-onnx[gpu]>=0.3.3",
-    "sounddevice>=0.5.1",
-    "soundfile>=0.13.0",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "python-multipart>=0.0.6",
+    "aiohttp>=3.9.0",
+    "aiofiles>=23.2.0",
+    "opencv-python-headless>=4.8.0",
+    "pillow>=10.0.0",
+    "pytz>=2023.3",
+    "selenium>=4.15.0",
+    "pydantic>=2.4.0",
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "feedparser>=6.0.0",
+    "openai>=1.0.0",
+    "webdriver-manager>=4.0.0",
+    "numpy>=1.24.0",
+    "soundfile>=0.12.0",
+    "kokoro-onnx>=0.3.0",
 ]
+
+[project.optional-dependencies]
+gpu = ["kokoro-onnx[gpu]>=0.3.0"]
+dev = ["pytest>=7.0.0", "black>=23.0.0", "isort>=5.12.0"]
+
+[project.urls]
+Homepage = "https://github.com/AIGleam/GleamVideo"
+Repository = "https://github.com/AIGleam/GleamVideo.git"
+Issues = "https://github.com/AIGleam/GleamVideo/issues"
+
+[project.scripts]
+gleamvideo = "gleamvideo:main"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["gleamvideo*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38']
+
+[tool.isort]
+profile = "black"
+line_length = 100
