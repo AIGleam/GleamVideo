@@ -1,735 +1,578 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>AI-Assisted Video Editing (Dark Mode)</title>
-  <meta charset="utf-8">
-  <style>
-    /* ===== GLOBAL DARK THEME STYLES ===== */
-
-    body {
-      background-color: #121212;
-      color: #E0E0E0;
-      margin: 0;
-      padding: 0;
-      font-family: "Segoe UI", Roboto, Arial, sans-serif;
-    }
-    h1, h2, h3, h4 {
-      color: #f0f0f0;
-      margin-bottom: 8px;
-    }
-    p {
-      color: #ccc;
-      margin-bottom: 10px;
-    }
-    label {
-      display: block;
-      margin-top: 10px;
-      font-weight: bold;
-      color: #ccc;
-    }
-    input[type=text], textarea, select {
-      width: 100%;
-      padding: 8px;
-      margin-top: 5px;
-      background-color: #2b2b2b;
-      color: #ccc;
-      border: 1px solid #444;
-      border-radius: 4px;
-      font-size: 0.9rem;
-    }
-    button {
-      margin-top: 10px;
-      padding: 10px 15px;
-      background-color: #3f51b5;
-      border: none;
-      border-radius: 4px;
-      color: #fff;
-      cursor: pointer;
-      font-size: 0.9rem;
-    }
-    button:hover {
-      background-color: #5c6bc0;
-    }
-    .container {
-      max-width: 1400px;
-      margin: 40px auto;
-      padding: 20px;
-      background-color: #1e1e1e;
-      border-radius: 8px;
-    }
-    .section-block {
-      background-color: #242424;
-      padding: 15px;
-      border-radius: 6px;
-      margin-bottom: 30px;
-    }
-    .heading-area {
-      margin-bottom: 15px;
-    }
-    .dynamic-fields {
-      margin-bottom: 10px;
-    }
-    .progress-area {
-      margin-top: 20px;
-      background-color: #2b2b2b;
-      padding: 10px;
-      border-radius: 4px;
-    }
-    .progress-bar-bg {
-      width: 100%;
-      background-color: #444;
-      height: 10px;
-      border-radius: 5px;
-      margin-top: 10px;
-      overflow: hidden;
-    }
-    .progress-bar-fill {
-      height: 100%;
-      background-color: #3f51b5;
-      width: 0%;
-    }
-    .info-text {
-      color: #888;
-      font-size: 0.85rem;
-    }
-
-    /* ===== LIST & DRAGGABLE ITEMS ===== */
-    .reorder-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-      border: 1px solid #444;
-      border-radius: 4px;
-      min-height: 50px;
-      background-color: #2b2b2b;
-    }
-    .reorder-list li {
-      padding: 8px;
-      margin: 4px;
-      background-color: #333;
-      border-radius: 4px;
-      cursor: move;
-      display: flex;
-      align-items: center;
-    }
-    .reorder-handle {
-      margin-right: 10px;
-      color: #999;
-    }
-    .link-input {
-      flex: 1;
-      background: #444;
-      color: #ccc;
-      border: none;
-      border-radius: 4px;
-      padding: 6px;
-    }
-
-    /* ===== WAVEFORM & TIMELINE ===== */
-    #waveform {
-      margin-top: 20px;
-      background-color: #181818;
-      border-radius: 6px;
-    }
-    #markersList {
-      margin-top: 15px;
-      border: 1px solid #444;
-      min-height: 30px;
-      padding: 5px;
-      background-color: #2b2b2b;
-      border-radius: 4px;
-    }
-    .marker-item {
-      background-color: #333;
-      padding: 5px;
-      margin: 4px 0;
-      border-radius: 4px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .marker-time {
-      font-weight: bold;
-      font-size: 0.9rem;
-    }
-    .marker-remove-btn {
-      background-color: #d32f2f;
-      color: #fff;
-      border: none;
-      padding: 4px 6px;
-      cursor: pointer;
-      border-radius: 4px;
-      font-size: 0.8rem;
-    }
-    .marker-remove-btn:hover {
-      background-color: #f44336;
-    }
-
-    /* ===== TIMELINE VISUAL EDITOR (EXAMPLE) ===== */
-    .timeline-editor {
-      margin-top: 20px;
-      background-color: #2b2b2b;
-      border: 1px solid #444;
-      border-radius: 6px;
-      padding: 10px;
-    }
-    .timeline-track {
-      display: flex;
-      align-items: center;
-      margin-bottom: 10px;
-      background-color: #222;
-      border-radius: 4px;
-      overflow: hidden;
-      position: relative;
-    }
-    .timeline-segment {
-      flex: 1;
-      padding: 6px;
-      background-color: #3a3a3a;
-      margin: 2px;
-      text-align: center;
-      color: #ccc;
-      font-size: 0.8rem;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: background-color 0.2s;
-    }
-    .timeline-segment:hover {
-      background-color: #505050;
-    }
-    .timeline-segment.selected {
-      background-color: #3f51b5;
-      color: #fff;
-    }
-
-    /* ===== SMALL UTILITY BUTTONS ===== */
-    .button-inline {
-      display: inline-block;
-      margin-top: 0;
-      margin-left: 10px;
-    }
-
-    /* Responsive tweak */
-    @media (max-width: 768px) {
-      .container {
-        margin: 20px auto;
-        padding: 10px;
-      }
-      .timeline-editor {
-        overflow-x: auto;
-      }
-    }
-  </style>
-  <!-- Wavesurfer for audio waveform -->
-  <script src="https://unpkg.com/wavesurfer.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GleamVideo Studio - Enhanced AI Video Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#7c3aed',
+                        secondary: '#1e293b',
+                        accent: '#f59e0b',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-shadow {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        .float-animation {
+            animation: float 6s ease-in-out infinite;
+        }
+        .progress-bar {
+            transition: width 0.5s ease-in-out;
+        }
+    </style>
 </head>
-<body>
-<div class="container">
-  <div class="heading-area">
-    <h1>AI-Assisted Video Editor (Dark Mode UI)</h1>
-    <p>
-      A fully featured, <strong>CapCut/Premiere-like</strong> editor in the browser.  
-      Supports:
-      <ul style="padding-left: 20px;">
-        <li>Manual or auto script generation (scraping & OCR + LLM)</li>
-        <li>Paragraph-based timeline editing</li>
-        <li>Background images/links for each paragraph</li>
-        <li>Wavesurfer audio waveform + marker-based transitions</li>
-        <li>1080p portrait or landscape output</li>
-        <li>Optional background music merging</li>
-      </ul>
-      This UI communicates with our FastAPI backend to produce the final Ken Burns video.
-    </p>
-  </div>
-
-  <!-- ===== AUTO GENERATION SECTION ===== -->
-  <div class="section-block">
-    <h2>1. Auto-Generate Script (Optional)</h2>
-    <p>Provide URLs or image paths (one per line). We'll scrape or OCR, then call the LLM for script generation.</p>
-    <textarea id="autoItems" rows="3" placeholder="e.g. https://some-article.com&#10;      or path/to/image.jpg"></textarea>
-    <div style="display: flex; gap: 10px; margin-top: 10px;">
-      <div>
-        <label>Style</label>
-        <select id="autoStyle">
-          <option value="formal">Formal</option>
-          <option value="conversational">Conversational</option>
-          <option value="educational">Educational</option>
-        </select>
-      </div>
-      <div>
-        <label>Prompt Type</label>
-        <select id="autoPromptType">
-          <option value="Create educational narrative">Create educational narrative</option>
-          <option value="Explain key concepts">Explain key concepts</option>
-          <option value="Summarize main points">Summarize main points</option>
-          <option value="Create engaging introduction">Create engaging introduction</option>
-        </select>
-      </div>
-    </div>
-    <button id="autoGenButton">Auto Generate Script</button>
-    <span id="autoGenStatus" style="margin-left: 10px; color: #ccc;"></span>
-  </div>
-
-  <!-- ===== PARAGRAPHS SECTION ===== -->
-  <div class="section-block">
-    <h2>2. Script Paragraphs (Manual or Auto)</h2>
-    <p>Each paragraph becomes one segment in the final video timeline. Reorder them if needed, or add more.</p>
-    <div id="paragraphsContainer">
-      <div class="dynamic-fields">
-        <textarea name="paragraphs" rows="3" placeholder="Enter script paragraph here"></textarea>
-      </div>
-    </div>
-    <button id="addParagraphBtn">+ Add Paragraph</button>
-    <p class="info-text">You can also drop a .txt file here (or in an advanced UI) to auto-populate.</p>
-  </div>
-
-  <!-- ===== BACKGROUNDS SECTION ===== -->
-  <div class="section-block">
-    <h2>3. Backgrounds (Links or Images)</h2>
-    <p>Provide as many backgrounds as you have paragraphs. Each background matches a paragraph by index. Drag to reorder if needed.</p>
-    <ul class="reorder-list" id="linksList">
-      <li draggable="true">
-        <span class="reorder-handle">&#9776;</span>
-        <input type="text" class="link-input" placeholder="Link or image path" />
-      </li>
-    </ul>
-    <button id="addBackgroundBtn">+ Add Background</button>
-    <div id="hiddenLinks"></div>
-  </div>
-
-  <!-- ===== TIMELINE VISUAL EDITOR SECTION (Optional Advanced Demo) ===== -->
-  <div class="section-block">
-    <h2>4. Timeline Visual Editor</h2>
-    <p>
-      (Optional) A mock timeline for segments. Each segment corresponds to a paragraph + background.
-      Click a segment to select it, drag them around, etc. (Demo concept—real logic is in your JS.)
-    </p>
-    <div class="timeline-editor" id="timelineEditor">
-      <!-- We'll dynamically fill tracks for each paragraph or background item. -->
-      <div id="timelineTrack" class="timeline-track">
-        <!-- timeline segments appear here dynamically -->
-      </div>
-    </div>
-    <p class="info-text">
-      In a real app, you'd have separate tracks for video, transitions, overlays, etc.
-      This is just a conceptual example for a single track + segments.
-    </p>
-  </div>
-
-  <!-- ===== AUDIO TIMELINE SECTION ===== -->
-  <div class="section-block">
-    <h2>5. Audio Timeline &amp; Markers</h2>
-    <p>Once TTS is generated, the audio is loaded below. Use "Add Marker" to set transition breakpoints.</p>
-    <div style="background: #2b2b2b; padding: 10px; border-radius: 4px;">
-      <div>
-        <button id="togglePlayBtn">Play/Pause</button>
-        <button id="addMarkerBtn">Add Marker</button>
-      </div>
-      <div id="waveform"></div>
-      <div id="markersList"></div>
-    </div>
-    <p class="info-text">
-      Markers can define each segment's duration or transition. 
-      The backend can interpret these times as durations for your Ken Burns effect.
-    </p>
-  </div>
-
-  <!-- ===== FINAL GENERATION SECTION ===== -->
-  <div class="section-block">
-    <h2>6. Final Video Generation</h2>
-    <form id="genForm">
-      <!-- Folder picking (Ubuntu) -->
-      <label>Output Folder</label>
-      <div style="display: flex; gap: 10px;">
-        <input type="file" webkitdirectory directory multiple style="display:none" id="folderPicker" />
-        <input type="text" name="output_folder" id="outputFolder" placeholder="/home/ubuntu/videos" style="flex: 1;" />
-        <button type="button" id="pickFolderBtn">Select Folder</button>
-      </div>
-
-      <label>Output Video Name</label>
-      <input type="text" name="output_name" id="outputName" placeholder="myvideo.mp4" />
-
-      <label>Choose Orientation (1080p)</label>
-      <select name="resolution" id="resolutionSelect">
-        <option value="1920x1080">Landscape (1920x1080)</option>
-        <option value="1080x1920">Portrait (1080x1920)</option>
-      </select>
-
-      <label>Uniform Transition Duration (seconds) (Optional)</label>
-      <input type="text" name="transition_duration" id="transitionDuration" placeholder="Leave blank if using markers" />
-
-      <label>Background Music (.mp3 Optional)</label>
-      <input type="file" name="bg_music" id="bgMusicInput" accept=".mp3,audio/mpeg" />
-
-      <input type="hidden" name="timestamps" id="markerTimestamps" />
-      <div class="progress-area">
-        <div id="progressMessage">Idle...</div>
-        <div class="progress-bar-bg">
-          <div class="progress-bar-fill"></div>
+<body class="bg-gray-900 text-white min-h-screen">
+    <!-- Header -->
+    <nav class="gradient-bg p-4 shadow-lg">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <i class="fas fa-video text-3xl text-white"></i>
+                <h1 class="text-2xl font-bold">GleamVideo Studio</h1>
+                <span class="bg-purple-600 px-2 py-1 rounded-full text-xs">Enhanced</span>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-robot text-amber-400"></i>
+                    <span class="text-sm">AI-Powered</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-magic text-purple-400"></i>
+                    <span class="text-sm">Auto Mode</span>
+                </div>
+            </div>
         </div>
-      </div>
-      <button type="submit" id="generateVideoBtn">Generate Final Video</button>
-    </form>
-  </div>
+    </nav>
 
-</div>
+    <div class="container mx-auto px-4 py-8">
+        <!-- Main Dashboard -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Left Panel - Configuration -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- API Configuration Card -->
+                <div class="bg-gray-800 rounded-xl p-6 card-shadow">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <i class="fas fa-key text-amber-400 text-xl"></i>
+                        <h2 class="text-xl font-semibold">API Configuration</h2>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-2">OpenRouter API Key</label>
+                            <div class="relative">
+                                <input type="password" id="apiKey" 
+                                       class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                       placeholder="Enter your OpenRouter API key for Gemini 2.5 Flash">
+                                <button type="button" onclick="toggleApiKeyVisibility()" 
+                                        class="absolute right-3 top-3 text-gray-400 hover:text-white">
+                                    <i class="fas fa-eye" id="toggleIcon"></i>
+                                </button>
+                            </div>
+                            <p class="text-sm text-gray-400 mt-1">Required for Auto Mode and AI features</p>
+                        </div>
+                        <button onclick="saveApiKey()" 
+                                class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors">
+                            <i class="fas fa-save mr-2"></i>Save Configuration
+                        </button>
+                    </div>
+                </div>
 
-<script>
-// =========================================================
-//  Global Vars: WaveSurfer, Markers, and Draggable logic
-// =========================================================
+                <!-- Auto Mode Card -->
+                <div class="bg-gray-800 rounded-xl p-6 card-shadow">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center space-x-3">
+                            <i class="fas fa-magic text-purple-400 text-xl"></i>
+                            <h2 class="text-xl font-semibold">Auto Mode</h2>
+                            <span id="autoModeStatus" class="px-2 py-1 bg-gray-700 rounded-full text-xs">Offline</span>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="autoModeToggle" class="sr-only peer" onchange="toggleAutoMode()">
+                            <div class="relative w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                        </label>
+                    </div>
+                    <div class="space-y-4">
+                        <p class="text-gray-300">Automatically monitors Reddit RSS feeds and generates video content using AI</p>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-2">Interval (minutes)</label>
+                                <input type="number" id="autoInterval" value="30" min="5" max="1440"
+                                       class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-2">Reddit Subreddit</label>
+                                <input type="text" id="subreddit" value="technology" 
+                                       class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500">
+                            </div>
+                        </div>
+                        <div class="flex space-x-3">
+                            <button onclick="runAutoNow()" id="runAutoBtn"
+                                    class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
+                                <i class="fas fa-play mr-2"></i>Run Auto Generation Now
+                            </button>
+                            <button onclick="stopAutoMode()" id="stopAutoBtn"
+                                    class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors">
+                                <i class="fas fa-stop mr-2"></i>Stop
+                            </button>
+                        </div>
+                    </div>
+                </div>
 
-let waveSurfer = null;
-let audioTimestamps = []; // user-defined marker times
-let selectedSegmentIndex = null; // For the timeline track mock
-// We'll store references to paragraph textareas, background inputs, etc.
+                <!-- Manual Video Generation Card -->
+                <div class="bg-gray-800 rounded-xl p-6 card-shadow">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <i class="fas fa-video text-blue-400 text-xl"></i>
+                        <h2 class="text-xl font-semibold">Manual Video Generation</h2>
+                    </div>
+                    <form id="videoForm" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Video Content (One paragraph per line)</label>
+                            <textarea id="paragraphs" rows="4" 
+                                      class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                      placeholder="Enter your video script content, one paragraph per line..."></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Website URLs (One per line)</label>
+                            <textarea id="links" rows="3" 
+                                      class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                      placeholder="https://example1.com&#10;https://example2.com"></textarea>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-2">Output Filename</label>
+                                <input type="text" id="outputName" 
+                                       class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                       placeholder="my-video.mp4">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-2">Resolution</label>
+                                <select id="resolution" 
+                                        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500">
+                                    <option value="1920x1080">1920x1080 (Full HD)</option>
+                                    <option value="1280x720">1280x720 (HD)</option>
+                                    <option value="3840x2160">3840x2160 (4K)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Transition Duration (seconds)</label>
+                            <input type="range" id="transitionDuration" min="1" max="5" value="2" step="0.5"
+                                   class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                            <span id="transitionValue" class="text-sm text-gray-400">2.0s</span>
+                        </div>
+                        <button type="submit" id="generateBtn"
+                                class="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 rounded-lg transition-all transform hover:scale-105">
+                            <i class="fas fa-magic mr-2"></i>Generate Video
+                        </button>
+                    </form>
+                </div>
+            </div>
 
-// =========================================================
-//  Page Setup
-// =========================================================
+            <!-- Right Panel - Status & Videos -->
+            <div class="space-y-6">
+                <!-- Status Card -->
+                <div class="bg-gray-800 rounded-xl p-6 card-shadow">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <i class="fas fa-chart-line text-green-400 text-xl"></i>
+                        <h2 class="text-xl font-semibold">Status</h2>
+                    </div>
+                    <div id="statusCard" class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-300">Current Task:</span>
+                            <span id="currentTask" class="text-green-400">Ready</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-300">Progress:</span>
+                            <span id="progressPercent" class="text-blue-400">0%</span>
+                        </div>
+                        <div class="w-full bg-gray-700 rounded-full h-2">
+                            <div id="progressBar" class="bg-gradient-to-r from-purple-500 to-blue-500 h-2 rounded-full progress-bar" style="width: 0%"></div>
+                        </div>
+                        <div id="progressMessage" class="text-sm text-gray-400">Waiting for tasks...</div>
+                    </div>
+                </div>
 
-window.addEventListener("DOMContentLoaded", () => {
-  enableReorderFeatures();
-  initWaveSurfer();
-  wireUpButtons();
-  buildTimelineTrack(); // create a basic track for demonstration
-});
+                <!-- Generated Videos Card -->
+                <div class="bg-gray-800 rounded-xl p-6 card-shadow">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center space-x-3">
+                            <i class="fas fa-film text-amber-400 text-xl"></i>
+                            <h2 class="text-xl font-semibold">Generated Videos</h2>
+                        </div>
+                        <button onclick="refreshVideos()" class="text-gray-400 hover:text-white">
+                            <i class="fas fa-refresh"></i>
+                        </button>
+                    </div>
+                    <div id="videosList" class="space-y-3">
+                        <div class="text-center text-gray-400 py-8">
+                            <i class="fas fa-video text-4xl mb-3"></i>
+                            <p>No videos generated yet</p>
+                        </div>
+                    </div>
+                </div>
 
-function wireUpButtons() {
-  // Auto generation
-  const autoGenButton = document.getElementById("autoGenButton");
-  autoGenButton.addEventListener("click", autoGenerateScript);
+                <!-- System Info Card -->
+                <div class="bg-gray-800 rounded-xl p-6 card-shadow">
+                    <div class="flex items-center space-x-3 mb-4">
+                        <i class="fas fa-info-circle text-cyan-400 text-xl"></i>
+                        <h2 class="text-xl font-semibold">System Info</h2>
+                    </div>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Server Status:</span>
+                            <span class="text-green-400">
+                                <i class="fas fa-circle text-xs mr-1"></i>Online
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">AI Model:</span>
+                            <span class="text-blue-400">Gemini 2.5 Flash</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Auto Mode:</span>
+                            <span id="autoModeInfo" class="text-gray-400">Disabled</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-  // Add paragraph
-  const addParagraphBtn = document.getElementById("addParagraphBtn");
-  addParagraphBtn.addEventListener("click", addParagraph);
+    <!-- Toast Notifications -->
+    <div id="toast" class="fixed top-4 right-4 z-50 hidden">
+        <div class="bg-gray-800 border border-gray-600 rounded-lg p-4 shadow-lg max-w-sm">
+            <div class="flex items-center space-x-3">
+                <i id="toastIcon" class="fas fa-info-circle text-blue-400"></i>
+                <div>
+                    <div id="toastTitle" class="font-semibold"></div>
+                    <div id="toastMessage" class="text-sm text-gray-300"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-  // Add background
-  const addBackgroundBtn = document.getElementById("addBackgroundBtn");
-  addBackgroundBtn.addEventListener("click", addBackgroundSegment);
+    <script>
+        let progressPolling = null;
+        let autoModeEnabled = false;
 
-  // Timeline marker
-  const togglePlayBtn = document.getElementById("togglePlayBtn");
-  togglePlayBtn.addEventListener("click", togglePlay);
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeApp();
+            setupEventListeners();
+            startProgressPolling();
+            refreshVideos();
+        });
 
-  const addMarkerBtn = document.getElementById("addMarkerBtn");
-  addMarkerBtn.addEventListener("click", addMarker);
+        function initializeApp() {
+            // Update transition duration display
+            const slider = document.getElementById('transitionDuration');
+            const display = document.getElementById('transitionValue');
+            slider.addEventListener('input', function() {
+                display.textContent = this.value + 's';
+            });
+        }
 
-  // Folder picking
-  const pickFolderBtn = document.getElementById("pickFolderBtn");
-  pickFolderBtn.addEventListener("click", () => {
-    document.getElementById("folderPicker").click();
-  });
-  document.getElementById("folderPicker").addEventListener("change", folderPicked);
+        function setupEventListeners() {
+            document.getElementById('videoForm').addEventListener('submit', handleVideoGeneration);
+        }
 
-  // Submit final video
-  const genForm = document.getElementById("genForm");
-  genForm.addEventListener("submit", generateVideo);
-}
+        function toggleApiKeyVisibility() {
+            const input = document.getElementById('apiKey');
+            const icon = document.getElementById('toggleIcon');
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'fas fa-eye-slash';
+            } else {
+                input.type = 'password';
+                icon.className = 'fas fa-eye';
+            }
+        }
 
-// =========================================================
-//  Reorderable backgrounds logic
-// =========================================================
-let dragSrcEl = null;
+        function saveApiKey() {
+            const apiKey = document.getElementById('apiKey').value.trim();
+            
+            if (!apiKey) {
+                showToast('Error', 'Please enter an API key', 'error');
+                return;
+            }
 
-function handleDragStart(e) {
-  dragSrcEl = this;
-  e.dataTransfer.effectAllowed = "move";
-  e.dataTransfer.setData("text/html", this.innerHTML);
-}
-function handleDragEnter(e) {
-  this.classList.add("over");
-}
-function handleDragLeave(e) {
-  this.classList.remove("over");
-}
-function handleDragOver(e) {
-  if (e.preventDefault) e.preventDefault();
-  e.dataTransfer.dropEffect = "move";
-  return false;
-}
-function handleDropReorder(e) {
-  if (e.stopPropagation) e.stopPropagation();
-  if (dragSrcEl != this) {
-    let tmp = dragSrcEl.innerHTML;
-    dragSrcEl.innerHTML = this.innerHTML;
-    this.innerHTML = tmp;
-  }
-  return false;
-}
-function handleDragEnd(e) {
-  let items = document.querySelectorAll(".reorder-list li");
-  items.forEach(it => {
-    it.classList.remove("over");
-  });
-}
+                         fetch('/api/config/api-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_key: apiKey })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Success', 'API key saved successfully', 'success');
+                } else {
+                    showToast('Error', data.error || 'Failed to save API key', 'error');
+                }
+            })
+            .catch(error => {
+                showToast('Error', 'Network error: ' + error.message, 'error');
+            });
+        }
 
-function enableReorderFeatures() {
-  let items = document.querySelectorAll(".reorder-list li");
-  items.forEach(item => {
-    item.setAttribute("draggable","true");
-    item.addEventListener("dragstart", handleDragStart, false);
-    item.addEventListener("dragenter", handleDragEnter, false);
-    item.addEventListener("dragover", handleDragOver, false);
-    item.addEventListener("dragleave", handleDragLeave, false);
-    item.addEventListener("drop", handleDropReorder, false);
-    item.addEventListener("dragend", handleDragEnd, false);
-  });
-}
+        function toggleAutoMode() {
+            const toggle = document.getElementById('autoModeToggle');
+            const apiKey = document.getElementById('apiKey').value.trim();
+            
+            if (toggle.checked && !apiKey) {
+                toggle.checked = false;
+                showToast('Error', 'Please set your API key first', 'error');
+                return;
+            }
 
-function addBackgroundSegment() {
-  const list = document.getElementById("linksList");
-  const li = document.createElement("li");
-  li.innerHTML = '<span class="reorder-handle">&#9776;</span>' +
-                 '<input type="text" class="link-input" placeholder="Link or image path"/>';
-  list.appendChild(li);
-  enableReorderFeatures();
-}
+            if (toggle.checked) {
+                startAutoMode();
+            } else {
+                stopAutoMode();
+            }
+        }
 
-// =========================================================
-//  Paragraph logic
-// =========================================================
-function addParagraph() {
-  const container = document.getElementById("paragraphsContainer");
-  const div = document.createElement("div");
-  div.classList.add("dynamic-fields");
-  div.innerHTML = `<textarea name="paragraphs" rows="3" placeholder="Enter script paragraph here"></textarea>`;
-  container.appendChild(div);
-}
+        function startAutoMode() {
+            const interval = document.getElementById('autoInterval').value;
+            const subreddit = document.getElementById('subreddit').value.trim();
+            
+                         fetch('/api/auto-mode/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    interval: parseInt(interval),
+                    subreddit: subreddit || 'technology'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    autoModeEnabled = true;
+                    updateAutoModeStatus('Active', 'text-green-400');
+                    document.getElementById('autoModeInfo').textContent = 'Active';
+                    document.getElementById('autoModeInfo').className = 'text-green-400';
+                    showToast('Success', 'Auto Mode started', 'success');
+                } else {
+                    document.getElementById('autoModeToggle').checked = false;
+                    showToast('Error', data.error || 'Failed to start Auto Mode', 'error');
+                }
+            })
+            .catch(error => {
+                document.getElementById('autoModeToggle').checked = false;
+                showToast('Error', 'Network error: ' + error.message, 'error');
+            });
+        }
 
-// =========================================================
-//  Folder picking logic (Ubuntu style) 
-// =========================================================
-function folderPicked(evt) {
-  const files = evt.target.files;
-  if (files.length > 0) {
-    let folderPath = files[0].webkitRelativePath;
-    if (folderPath.indexOf("/") > -1) {
-      folderPath = folderPath.split("/")[0];
-    }
-    document.getElementById("outputFolder").value = folderPath || "";
-  }
-}
+        function stopAutoMode() {
+                         fetch('/api/auto-mode/stop', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                autoModeEnabled = false;
+                updateAutoModeStatus('Offline', 'text-gray-400');
+                document.getElementById('autoModeInfo').textContent = 'Disabled';
+                document.getElementById('autoModeInfo').className = 'text-gray-400';
+                document.getElementById('autoModeToggle').checked = false;
+                showToast('Info', 'Auto Mode stopped', 'info');
+            });
+        }
 
-// =========================================================
-//  WaveSurfer & Marker Logic
-// =========================================================
-function initWaveSurfer() {
-  waveSurfer = WaveSurfer.create({
-    container: "#waveform",
-    waveColor: "violet",
-    progressColor: "purple",
-    height: 90
-  });
-  // Attempt to load the last TTS from our backend
-  waveSurfer.load("/temp_tts_audio");
-  waveSurfer.on("ready", () => {
-    console.log("WaveSurfer loaded. Duration =", waveSurfer.getDuration());
-  });
-}
+        function runAutoNow() {
+            const apiKey = document.getElementById('apiKey').value.trim();
+            
+            if (!apiKey) {
+                showToast('Error', 'Please set your API key first', 'error');
+                return;
+            }
 
-function togglePlay() {
-  if(waveSurfer) {
-    waveSurfer.playPause();
-  }
-}
+            document.getElementById('runAutoBtn').disabled = true;
+            
+                         fetch('/api/auto-mode/run-now', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Success', 'Auto generation started', 'success');
+                } else {
+                    showToast('Error', data.error || 'Failed to start auto generation', 'error');
+                }
+            })
+            .catch(error => {
+                showToast('Error', 'Network error: ' + error.message, 'error');
+            })
+            .finally(() => {
+                setTimeout(() => {
+                    document.getElementById('runAutoBtn').disabled = false;
+                }, 5000);
+            });
+        }
 
-function addMarker() {
-  if(!waveSurfer) return;
-  const currentTime = waveSurfer.getCurrentTime();
-  audioTimestamps.push(parseFloat(currentTime.toFixed(2)));
-  renderMarkers();
-}
+        function updateAutoModeStatus(status, className) {
+            const statusElement = document.getElementById('autoModeStatus');
+            statusElement.textContent = status;
+            statusElement.className = `px-2 py-1 bg-gray-700 rounded-full text-xs ${className}`;
+        }
 
-function renderMarkers() {
-  audioTimestamps.sort((a,b)=>a-b);
-  const list = document.getElementById("markersList");
-  list.innerHTML = "";
-  audioTimestamps.forEach((ts, idx)=>{
-    const div = document.createElement("div");
-    div.classList.add("marker-item");
-    div.innerHTML = `
-      <span class="marker-time">${ts.toFixed(2)}s</span>
-      <button class="marker-remove-btn" onclick="removeMarker(${idx})">Remove</button>
-    `;
-    list.appendChild(div);
-  });
-}
+        function handleVideoGeneration(e) {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            const paragraphs = document.getElementById('paragraphs').value.trim().split('\n').filter(p => p.trim());
+            const links = document.getElementById('links').value.trim().split('\n').filter(l => l.trim());
+            const outputName = document.getElementById('outputName').value.trim() || 'generated-video.mp4';
+            const resolution = document.getElementById('resolution').value;
+            const transitionDuration = document.getElementById('transitionDuration').value;
 
-function removeMarker(index) {
-  audioTimestamps.splice(index,1);
-  renderMarkers();
-}
+            if (paragraphs.length === 0) {
+                showToast('Error', 'Please enter some content for the video', 'error');
+                return;
+            }
 
-// =========================================================
-//  TIMELINE VISUAL EDITOR (DEMO ONLY)
-// =========================================================
-function buildTimelineTrack() {
-  // For demonstration, let's build segments that correspond
-  // to the paragraphs. We'll do a simple row of blocks.
-  const track = document.getElementById("timelineTrack");
-  track.innerHTML = "";
-  const paragraphs = document.querySelectorAll("#paragraphsContainer textarea");
-  paragraphs.forEach((para, index) => {
-    const seg = document.createElement("div");
-    seg.classList.add("timeline-segment");
-    seg.innerText = `Segment ${index+1}`;
-    seg.onclick = () => selectSegment(index);
-    track.appendChild(seg);
-  });
-}
+            paragraphs.forEach(p => formData.append('paragraphs', p));
+            links.forEach(l => formData.append('links', l));
+            formData.append('output_name', outputName);
+            formData.append('resolution', resolution);
+            formData.append('transition_duration', transitionDuration);
 
-function selectSegment(index) {
-  selectedSegmentIndex = index;
-  const segs = document.querySelectorAll(".timeline-segment");
-  segs.forEach((s, i)=>{
-    s.classList.remove("selected");
-    if(i === index) {
-      s.classList.add("selected");
-    }
-  });
-  console.log("Selected timeline segment index:", index);
-}
+            document.getElementById('generateBtn').disabled = true;
+            document.getElementById('generateBtn').innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Generating...';
 
-// We'll re-run this if paragraphs are changed or re-ordered. 
-// (In a real app, you'd track reordering events, etc.)
+                         fetch('/generate_video', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Success', 'Video generation started!', 'success');
+                    document.getElementById('videoForm').reset();
+                } else {
+                    showToast('Error', data.error || 'Failed to start video generation', 'error');
+                }
+            })
+            .catch(error => {
+                showToast('Error', 'Network error: ' + error.message, 'error');
+            })
+            .finally(() => {
+                setTimeout(() => {
+                    document.getElementById('generateBtn').disabled = false;
+                    document.getElementById('generateBtn').innerHTML = '<i class="fas fa-magic mr-2"></i>Generate Video';
+                }, 2000);
+            });
+        }
 
-// =========================================================
-//  AUTO GENERATION (Scraping/OCR + LLM)
-// =========================================================
-async function autoGenerateScript() {
-  const itemsText = document.getElementById("autoItems").value;
-  const items = itemsText.split("\n").map(x=>x.trim()).filter(x=>x);
-  if(items.length===0){
-    alert("No items provided for auto-generation.");
-    return;
-  }
-  const styleVal = document.getElementById("autoStyle").value;
-  const promptVal = document.getElementById("autoPromptType").value;
+        function startProgressPolling() {
+            progressPolling = setInterval(updateProgress, 2000);
+        }
 
-  const payload = {
-    items: items,
-    style: styleVal,
-    prompt_type: promptVal
-  };
-  const statusEl = document.getElementById("autoGenStatus");
-  statusEl.innerText = "Analyzing...";
+        function updateProgress() {
+            fetch('/progress')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('currentTask').textContent = data.status || 'Ready';
+                    document.getElementById('progressPercent').textContent = (data.progress || 0) + '%';
+                    document.getElementById('progressBar').style.width = (data.progress || 0) + '%';
+                    document.getElementById('progressMessage').textContent = data.message || 'Waiting for tasks...';
+                    
+                    // Update status color based on task state
+                    const taskElement = document.getElementById('currentTask');
+                    if (data.status === 'working') {
+                        taskElement.className = 'text-blue-400';
+                    } else if (data.status === 'complete') {
+                        taskElement.className = 'text-green-400';
+                        refreshVideos();
+                    } else if (data.status === 'error') {
+                        taskElement.className = 'text-red-400';
+                    } else {
+                        taskElement.className = 'text-green-400';
+                    }
+                })
+                .catch(() => {
+                    // Ignore network errors for progress polling
+                });
+        }
 
-  try {
-    const resp = await fetch("/analyze_content", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify(payload)
-    });
-    if(!resp.ok) {
-      statusEl.innerText = "Error from server.";
-      return;
-    }
-    const data = await resp.json();
-    if(data.error) {
-      statusEl.innerText = "Error: "+data.error;
-      return;
-    }
-    // data.paragraphs => array of generated paragraphs
-    const paragraphs = data.paragraphs || [];
+        function refreshVideos() {
+                         fetch('/api/videos/list')
+                .then(response => response.json())
+                .then(data => {
+                    const container = document.getElementById('videosList');
+                    
+                    if (data.videos && data.videos.length > 0) {
+                        container.innerHTML = data.videos.map(video => `
+                            <div class="bg-gray-700 rounded-lg p-3 flex justify-between items-center">
+                                <div>
+                                    <div class="font-medium text-sm">${video.name}</div>
+                                    <div class="text-xs text-gray-400">${new Date(video.created).toLocaleString()}</div>
+                                    <div class="text-xs text-gray-500">${video.size}</div>
+                                </div>
+                                                                 <a href="/api/videos/download/${video.name}" 
+                                   class="text-blue-400 hover:text-blue-300">
+                                    <i class="fas fa-download"></i>
+                                </a>
+                            </div>
+                        `).join('');
+                    } else {
+                        container.innerHTML = `
+                            <div class="text-center text-gray-400 py-8">
+                                <i class="fas fa-video text-4xl mb-3"></i>
+                                <p>No videos generated yet</p>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching videos:', error);
+                });
+        }
 
-    const container = document.getElementById("paragraphsContainer");
-    container.innerHTML = "";
-    paragraphs.forEach(pg=>{
-      const div = document.createElement("div");
-      div.classList.add("dynamic-fields");
-      div.innerHTML = `<textarea name="paragraphs" rows="3">${pg}</textarea>`;
-      container.appendChild(div);
-    });
-    statusEl.innerText = "Success. Edit paragraphs if needed.";
+        function showToast(title, message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const icon = document.getElementById('toastIcon');
+            const titleEl = document.getElementById('toastTitle');
+            const messageEl = document.getElementById('toastMessage');
 
-    // Rebuild timeline segments
-    buildTimelineTrack();
-  } catch(err) {
-    console.error(err);
-    statusEl.innerText = "Exception in auto generate script.";
-  }
-}
+            // Set icon and color based on type
+            const types = {
+                success: { icon: 'fas fa-check-circle', color: 'text-green-400' },
+                error: { icon: 'fas fa-exclamation-circle', color: 'text-red-400' },
+                warning: { icon: 'fas fa-exclamation-triangle', color: 'text-yellow-400' },
+                info: { icon: 'fas fa-info-circle', color: 'text-blue-400' }
+            };
 
-// =========================================================
-//  FINAL VIDEO GENERATION
-// =========================================================
-async function generateVideo(e) {
-  e.preventDefault();
-  // gather paragraphs
-  const paragraphsEls = document.querySelectorAll("#paragraphsContainer textarea");
-  const linksEls = document.querySelectorAll("#linksList li .link-input");
+            const typeConfig = types[type] || types.info;
+            icon.className = typeConfig.icon + ' ' + typeConfig.color;
+            titleEl.textContent = title;
+            messageEl.textContent = message;
 
-  // put them in hidden form fields
-  const hiddenLinks = document.getElementById("hiddenLinks");
-  hiddenLinks.innerHTML = "";
-  linksEls.forEach(linkInput=>{
-    const val = linkInput.value;
-    const inputEl = document.createElement("input");
-    inputEl.type = "hidden";
-    inputEl.name = "links";
-    inputEl.value = val;
-    hiddenLinks.appendChild(inputEl);
-  });
-
-  // store timestamps in hidden input
-  document.getElementById("markerTimestamps").value = audioTimestamps.join(",");
-
-  // Show starting progress
-  document.getElementById("progressMessage").innerText="Starting...";
-  document.querySelector(".progress-bar-fill").style.width="0%";
-
-  // Actually send form data 
-  const formEl = document.getElementById("genForm");
-  const formData = new FormData(formEl);
-
-  // We also need to attach the paragraphs. 
-  paragraphsEls.forEach( pEl => {
-    const pVal = pEl.value;
-    formData.append("paragraphs", pVal);
-  });
-
-  try {
-    const resp = await fetch("/generate_video", {
-      method: "POST",
-      body: formData
-    });
-    if(!resp.ok){
-      alert("Video generation request failed. Check logs or server console.");
-      return;
-    }
-    const data = await resp.json();
-    if(data.error){
-      alert("Error: "+data.error);
-      return;
-    }
-    pollProgress(data.task_id);
-  } catch(err){
-    console.error("Generate video error:", err);
-    alert("Exception in generating video. See console for details.");
-  }
-}
-
-let pollInterval = null;
-async function pollProgress(taskId){
-  if(pollInterval) clearInterval(pollInterval);
-  pollInterval = setInterval(async ()=>{
-    const r = await fetch("/progress?task_id="+taskId);
-    if(!r.ok) return;
-    const info = await r.json();
-    document.getElementById("progressMessage").innerText = info.message;
-    document.querySelector(".progress-bar-fill").style.width = info.pct + "%";
-    if(info.status==="done"){
-      clearInterval(pollInterval);
-      document.getElementById("progressMessage").innerText = "Done! "+info.message;
-    } else if(info.status==="error"){
-      clearInterval(pollInterval);
-      document.getElementById("progressMessage").innerText = "Error: "+info.message;
-    }
-  }, 1000);
-}
-
-</script>
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 4000);
+        }
+    </script>
 </body>
 </html>
 
