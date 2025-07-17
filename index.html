@@ -355,13 +355,14 @@
         function startAutoMode() {
             const interval = document.getElementById('autoInterval').value;
             const subreddit = document.getElementById('subreddit').value.trim();
-            
-                         fetch('/api/auto-mode/start', {
+
+            fetch('/api/auto-mode/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    interval: parseInt(interval),
-                    subreddit: subreddit || 'technology'
+                body: JSON.stringify({
+                    enabled: true,
+                    interval_hours: parseInt(interval),
+                    rss_feeds: [`https://www.reddit.com/r/${subreddit || 'technology'}/.rss`]
                 })
             })
             .then(response => response.json())
