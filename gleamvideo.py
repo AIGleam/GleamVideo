@@ -16,7 +16,6 @@ import requests
 import aiohttp
 import aiofiles
 import tempfile
-import zipfile
 import time
 import numpy as np
 import cv2
@@ -28,16 +27,13 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Union
 from pathlib import Path
 import json
-import hashlib
 import logging
-import tempfile
 import shutil
 from urllib.parse import urlparse, unquote
 import re
-import threading
 from concurrent.futures import ThreadPoolExecutor
 import feedparser
-from bs4 import BeautifulSoup
+import platform
 
 # FastAPI imports
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, BackgroundTasks
@@ -78,6 +74,25 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Cross-platform utility functions
+# ---------------------------------------------------------------------------
+
+def get_system_font_path():
+    """Get system font path based on platform"""
+    system = platform.system()
+    
+    if system == "Windows":
+        return "C:/Windows/Fonts/arial.ttf"
+    elif system == "Darwin":  # macOS
+        return "/System/Library/Fonts/Arial.ttf"
+    else:  # Linux
+        return "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+def ensure_cross_platform_path(path_str: str) -> str:
+    """Ensure path works across platforms"""
+    return str(Path(path_str).resolve())
+
+# ---------------------------------------------------------------------------
 # Configuration and Global Variables
 # ---------------------------------------------------------------------------
 
@@ -98,23 +113,32 @@ app_config = AppConfig()
 
 # Enhanced progress tracking
 progress_data = {
-    "status": "idle",  # idle, working, done, error
-    "message": "",
+    "status": "idle",
+    "message": "Ready to generate videos",
     "pct": 0,
-    "current_task": "",
-    "auto_mode": False,
-    "last_auto_run": None
+    "current_task": ""
 }
 
+# Application instances
+app = FastAPI(
+    title="GleamVideo Enhanced",
+    description="AI-Powered Video Generation Platform",
+    version="2.0.0"
+)
+
 def update_progress(status: str, message: str, pct: float, current_task: str = ""):
-    progress_data["status"] = status
-    progress_data["message"] = message
-    progress_data["pct"] = pct
-    progress_data["current_task"] = current_task
-    logger.info(f"Progress: {status} - {message} ({pct}%)")
+    """Update global progress state"""
+    global progress_data
+    progress_data.update({
+        "status": status,
+        "message": message,
+        "pct": max(0, min(100, pct)),
+        "current_task": current_task
+    })
+    logger.info(f"Progress: {pct:.1f}% - {message}")
 
 # ---------------------------------------------------------------------------
-# Gemini 2.5 Flash Integration via OpenRouter
+# AI Integration with Gemini
 # ---------------------------------------------------------------------------
 class GeminiClient:
     def __init__(self, api_key: str):
@@ -503,26 +527,15 @@ class EnhancedVideoGenerator:
                 pan_x = int(width * 0.05 * progress)
                 pan_y = int(height * 0.03 * progress)
                 
-                # Create transformation matrix
-                new_width = int(width * current_scale)
-                new_height = int(height * current_scale)
+                # Apply scale and pan
+                center_x, center_y = width // 2, height // 2
+                M = cv2.getRotationMatrix2D((center_x + pan_x, center_y + pan_y), 0, current_scale)
                 
-                # Resize image
-                resized = cv2.resize(img, (new_width, new_height))
-                
-                # Calculate crop area
-                crop_x = max(0, (new_width - width) // 2 + pan_x)
-                crop_y = max(0, (new_height - height) // 2 + pan_y)
-                
-                # Ensure crop doesn't exceed image boundaries
-                crop_x = min(crop_x, new_width - width)
-                crop_y = min(crop_y, new_height - height)
-                
-                # Crop to original size
-                frame = resized[crop_y:crop_y + height, crop_x:crop_x + width]
+                # Apply transformation
+                transformed = cv2.warpAffine(img, M, (width, height))
                 
                 # Write frame
-                out.write(frame)
+                out.write(transformed)
             
             out.release()
             logger.info(f"Ken Burns effect applied: {output_path}")
@@ -532,92 +545,92 @@ class EnhancedVideoGenerator:
             logger.error(f"Error applying Ken Burns effect: {e}")
             return False
     
-    async def create_video(self, paragraphs: List[str], links: List[str], 
-                          output_name: str, resolution: str = "1920x1080",
+    async def create_video(self, paragraphs: List[str], links: List[str],
+                          output_name: str = "generated_video.mp4",
+                          resolution: str = "1920x1080", 
                           transition_duration: float = 2.0) -> bool:
-        """Create enhanced video with multiple improvements"""
+        """Create video from paragraphs and links"""
+        temp_dir = None
         try:
-            update_progress("working", "Initializing video creation...", 5, "Setup")
-            
-            # Create temp directory
-            temp_dir = tempfile.mkdtemp(prefix="gleamvideo_")
-            logger.info(f"Working in temp directory: {temp_dir}")
-            
             # Parse resolution
             width, height = map(int, resolution.split('x'))
             
-            # Generate audio for each paragraph
-            audio_files = []
+            # Create temporary directory
+            temp_dir = tempfile.mkdtemp(prefix="gleamvideo_")
+            logger.info(f"Working in temp directory: {temp_dir}")
+            
+            update_progress("working", "Generating audio and video segments...", 20, "Processing Content")
+            
             video_clips = []
+            audio_files = []
             
-            update_progress("working", "Generating speech audio...", 15, "TTS Generation")
-            
+            # Process each paragraph
             for i, paragraph in enumerate(paragraphs):
+                progress = 20 + (i / len(paragraphs)) * 60
+                update_progress("working", f"Processing segment {i+1}/{len(paragraphs)}", progress, f"Segment {i+1}")
+                
+                # Generate TTS audio
                 audio_file = os.path.join(temp_dir, f"audio_{i}.wav")
                 if self.tts_manager.generate_speech(paragraph, audio_file):
                     audio_files.append(audio_file)
                 else:
-                    logger.warning(f"Failed to generate audio for paragraph {i}")
-            
-            # Process images and create video clips
-            update_progress("working", "Processing images and creating clips...", 30, "Image Processing")
-            
-            for i, (paragraph, link) in enumerate(zip(paragraphs, links + [''] * len(paragraphs))):
+                    logger.warning(f"Failed to generate audio for segment {i}")
+                    continue
+                
+                # Create video clip
                 clip_path = os.path.join(temp_dir, f"clip_{i}.mp4")
                 
-                if link and link.strip():
-                    # Try to capture screenshot
+                # Try to get screenshot if URL provided
+                if i < len(links) and links[i].strip():
                     screenshot_path = os.path.join(temp_dir, f"screenshot_{i}.png")
-                    if self.screenshot_manager.capture_advanced_screenshot(link, screenshot_path):
+                    if self.screenshot_manager.capture_advanced_screenshot(links[i], screenshot_path):
                         # Apply Ken Burns effect
                         ken_burns_path = os.path.join(temp_dir, f"kenburns_{i}.mp4")
-                        if self.apply_ken_burns_effect(screenshot_path, ken_burns_path, 3.0):
+                        if self.apply_ken_burns_effect(screenshot_path, ken_burns_path, transition_duration + 2):
                             video_clips.append(ken_burns_path)
                         else:
                             # Fallback to static image
-                            self.create_static_clip(screenshot_path, clip_path, 3.0, width, height)
+                            self.create_static_clip(screenshot_path, clip_path, transition_duration + 2, width, height)
                             video_clips.append(clip_path)
                     else:
-                        # Create text-based clip
-                        self.create_text_clip(paragraph[:100], clip_path, 3.0, width, height)
+                        # Create text-only clip
+                        self.create_text_clip(paragraph, clip_path, transition_duration + 2, width, height)
                         video_clips.append(clip_path)
                 else:
-                    # Create text-based clip
-                    self.create_text_clip(paragraph[:100], clip_path, 3.0, width, height)
+                    # Create text-only clip
+                    self.create_text_clip(paragraph, clip_path, transition_duration + 2, width, height)
                     video_clips.append(clip_path)
             
-            # Combine video clips
-            update_progress("working", "Combining video clips...", 60, "Video Assembly")
-            
-            final_video_path = await self.combine_clips_with_audio(
-                video_clips, audio_files, temp_dir, output_name, transition_duration
-            )
-            
-            # Move final video to videos directory
-            os.makedirs("videos", exist_ok=True)
-            final_output = os.path.join("videos", output_name)
-            
-            if os.path.exists(final_video_path):
-                shutil.move(final_video_path, final_output)
-                logger.info(f"Video created successfully: {final_output}")
-                update_progress("done", f"Video created: {output_name}", 100, "Complete")
-                return True
-            else:
-                logger.error("Final video file not found")
-                update_progress("error", "Video creation failed", 0, "Error")
+            if not video_clips:
+                logger.error("No video clips were created")
                 return False
             
+            update_progress("working", "Combining video and audio...", 85, "Final Assembly")
+            
+            # Combine all clips
+            final_output = os.path.join("videos", output_name)
+            success = await self.combine_clips_with_audio(video_clips, audio_files, final_output, temp_dir)
+            
+            if success:
+                update_progress("done", f"Video created successfully: {output_name}", 100, "Complete")
+                logger.info(f"Video generation completed: {final_output}")
+                return True
+            else:
+                update_progress("error", "Failed to combine video segments", 0, "Error")
+                return False
+                
         except Exception as e:
-            logger.error(f"Error creating video: {e}")
+            logger.error(f"Error in video creation: {e}")
             update_progress("error", f"Video creation failed: {str(e)}", 0, "Error")
             return False
         finally:
             # Cleanup
-            try:
-                shutil.rmtree(temp_dir, ignore_errors=True)
-                self.screenshot_manager.cleanup()
-            except Exception as e:
-                logger.error(f"Cleanup error: {e}")
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    shutil.rmtree(temp_dir)
+                    logger.info(f"Cleaned up temp directory: {temp_dir}")
+                except Exception as e:
+                    logger.error(f"Cleanup error: {e}")
     
     def create_text_clip(self, text: str, output_path: str, duration: float, width: int, height: int):
         """Create a video clip with animated text"""
@@ -626,10 +639,12 @@ class EnhancedVideoGenerator:
             img = Image.new('RGB', (width, height), color='#1a1a2e')
             draw = ImageDraw.Draw(img)
             
-            # Try to use a nice font
+            # Try to use a system font
             try:
-                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
-            except:
+                font_path = get_system_font_path()
+                font = ImageFont.truetype(font_path, 48)
+            except Exception as e:
+                logger.warning(f"Could not load system font: {e}")
                 font = ImageFont.load_default()
             
             # Calculate text position
@@ -648,139 +663,129 @@ class EnhancedVideoGenerator:
             
             draw.text((x, y), text, font=font, fill='white')
             
-            # Save image
+            # Save as temporary image
             temp_img_path = output_path.replace('.mp4', '.png')
             img.save(temp_img_path)
             
-            # Convert to video
-            fps = 30
-            total_frames = int(duration * fps)
+            # Convert to video using ffmpeg
+            cmd = [
+                'ffmpeg', '-y', '-loop', '1', '-i', temp_img_path,
+                '-c:v', 'libx264', '-t', str(duration), '-pix_fmt', 'yuv420p',
+                '-vf', f'scale={width}:{height}', output_path
+            ]
             
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-            
-            # Load image with OpenCV
-            cv_img = cv2.imread(temp_img_path)
-            
-            for _ in range(total_frames):
-                out.write(cv_img)
-            
-            out.release()
-            os.remove(temp_img_path)
-            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                logger.info(f"Text clip created: {output_path}")
+                # Clean up temp image
+                try:
+                    os.remove(temp_img_path)
+                except:
+                    pass
+            else:
+                logger.error(f"FFmpeg text clip error: {result.stderr}")
+                
         except Exception as e:
             logger.error(f"Error creating text clip: {e}")
     
     def create_static_clip(self, image_path: str, output_path: str, duration: float, width: int, height: int):
         """Create a static video clip from an image"""
         try:
-            img = cv2.imread(image_path)
-            if img is None:
-                return
+            cmd = [
+                'ffmpeg', '-y', '-loop', '1', '-i', image_path,
+                '-c:v', 'libx264', '-t', str(duration), '-pix_fmt', 'yuv420p',
+                '-vf', f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2',
+                output_path
+            ]
             
-            # Resize image to target resolution
-            img = cv2.resize(img, (width, height))
-            
-            fps = 30
-            total_frames = int(duration * fps)
-            
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-            
-            for _ in range(total_frames):
-                out.write(img)
-            
-            out.release()
-            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                logger.info(f"Static clip created: {output_path}")
+            else:
+                logger.error(f"FFmpeg static clip error: {result.stderr}")
+                
         except Exception as e:
             logger.error(f"Error creating static clip: {e}")
     
-    async def combine_clips_with_audio(self, video_clips: List[str], audio_files: List[str], 
-                                     temp_dir: str, output_name: str, transition_duration: float) -> str:
+    async def combine_clips_with_audio(self, video_clips: List[str], audio_files: List[str],
+                                      output_path: str, temp_dir: str) -> bool:
         """Combine video clips with audio using FFmpeg"""
         try:
-            # Create file list for FFmpeg
+            # Create file list for FFmpeg concat
             file_list_path = os.path.join(temp_dir, "file_list.txt")
             with open(file_list_path, 'w') as f:
                 for clip in video_clips:
-                    if os.path.exists(clip):
-                        f.write(f"file '{clip}'\n")
+                    # Use forward slashes for FFmpeg on all platforms
+                    clip_path = clip.replace('\\', '/')
+                    f.write(f"file '{clip_path}'\n")
             
             # Combine video clips
             combined_video = os.path.join(temp_dir, "combined_video.mp4")
-            cmd_video = [
+            cmd = [
                 'ffmpeg', '-f', 'concat', '-safe', '0', '-i', file_list_path,
-                '-c:v', 'libx264', '-preset', 'medium', '-crf', '23',
-                '-y', combined_video
+                '-c', 'copy', combined_video, '-y'
             ]
             
-            result = subprocess.run(cmd_video, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
                 logger.error(f"FFmpeg video combine error: {result.stderr}")
-                return ""
+                return False
             
-            # Combine audio files if any
+            # If we have audio files, combine them and add to video
             if audio_files:
+                # Create audio file list
                 audio_list_path = os.path.join(temp_dir, "audio_list.txt")
                 with open(audio_list_path, 'w') as f:
                     for audio in audio_files:
-                        if os.path.exists(audio):
-                            f.write(f"file '{audio}'\n")
+                        # Use forward slashes for FFmpeg on all platforms
+                        audio_path = audio.replace('\\', '/')
+                        f.write(f"file '{audio_path}'\n")
                 
+                # Combine audio files
                 combined_audio = os.path.join(temp_dir, "combined_audio.wav")
-                cmd_audio = [
+                cmd = [
                     'ffmpeg', '-f', 'concat', '-safe', '0', '-i', audio_list_path,
-                    '-y', combined_audio
+                    '-c', 'copy', combined_audio, '-y'
                 ]
                 
-                subprocess.run(cmd_audio, capture_output=True, text=True)
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode != 0:
+                    logger.error(f"FFmpeg audio combine error: {result.stderr}")
+                    # Continue without audio
+                    final_output = os.path.join(temp_dir, output_path)
+                    shutil.copy2(combined_video, ensure_cross_platform_path(output_path))
+                    return True
                 
-                # Combine video with audio
-                final_output = os.path.join(temp_dir, output_name)
-                cmd_final = [
+                # Combine video and audio
+                cmd = [
                     'ffmpeg', '-i', combined_video, '-i', combined_audio,
                     '-c:v', 'copy', '-c:a', 'aac', '-shortest',
-                    '-y', final_output
+                    ensure_cross_platform_path(output_path), '-y'
                 ]
                 
-                result = subprocess.run(cmd_final, capture_output=True, text=True)
+                result = subprocess.run(cmd, capture_output=True, text=True)
                 if result.returncode != 0:
                     logger.error(f"FFmpeg final combine error: {result.stderr}")
-                    return combined_video
-                
-                return final_output
+                    return False
             else:
-                # No audio, just return video
-                final_output = os.path.join(temp_dir, output_name)
-                shutil.copy(combined_video, final_output)
-                return final_output
+                # No audio, just copy video
+                final_output = os.path.join(temp_dir, output_path)
+                shutil.copy2(combined_video, ensure_cross_platform_path(output_path))
+            
+            return True
             
         except Exception as e:
             logger.error(f"Error combining clips: {e}")
-            return ""
-
-# ---------------------------------------------------------------------------
-# FastAPI Application Setup
-# ---------------------------------------------------------------------------
-app = FastAPI(title="GleamVideo Enhanced", version="3.0.0")
-
-# Add middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+            return False
 
 # Global instances
 auto_mode_manager = AutoModeManager()
 video_generator = EnhancedVideoGenerator()
 
-# Pydantic models
+# ---------------------------------------------------------------------------
+# Pydantic Models
+# ---------------------------------------------------------------------------
 class AutoModeConfig(BaseModel):
-    enabled: bool
     interval_hours: int = 1
     rss_feeds: List[str] = []
 
@@ -803,7 +808,6 @@ async def index():
 # ---------------------------------------------------------------------------
 # API Endpoints
 # ---------------------------------------------------------------------------
-
 @app.post("/api/config/api-key")
 async def set_api_key(config: APIKeyConfig):
     """Set the OpenRouter API key"""
@@ -820,17 +824,20 @@ async def start_auto_mode_api(config: AutoModeConfig):
     """Start auto mode"""
     try:
         if not app_config.openrouter_api_key:
-            return {"success": False, "error": "OpenRouter API key not set"}
+            return {"success": False, "error": "OpenRouter API key not configured"}
         
-        app_config.auto_mode_enabled = True
-        app_config.auto_mode_interval = config.interval_hours * 3600
+        # Update configuration
+        if config.interval_hours > 0:
+            app_config.auto_mode_interval = config.interval_hours * 3600
         
         if config.rss_feeds:
             app_config.reddit_rss_feeds = config.rss_feeds
         
+        # Start auto mode
         success = await auto_mode_manager.start_auto_mode()
         
         if success:
+            app_config.auto_mode_enabled = True
             return {"success": True}
         else:
             return {"success": False, "error": "Failed to start auto mode"}
@@ -855,7 +862,7 @@ async def run_auto_now_api():
     """Trigger immediate auto generation"""
     try:
         if not app_config.openrouter_api_key:
-            return {"success": False, "error": "OpenRouter API key not set"}
+            return {"success": False, "error": "OpenRouter API key not configured"}
         
         # Run auto generation in background
         asyncio.create_task(auto_mode_manager.run_auto_generation())
