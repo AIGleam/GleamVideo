@@ -35,15 +35,44 @@
 - System information dashboard
 - Responsive design for all screen sizes
 
-## 🚀 Quick Start
+## 🚀 Quick Start - Cross-Platform Support
 
-### 1. Installation
+### 📱 **Windows, Ubuntu, and macOS Compatible!**
+
+#### **🪟 Windows Users**
+```batch
+# Double-click to run:
+start_gleamvideo.bat
+
+# Or use the universal launcher:
+python launch.py
+```
+
+#### **🐧 Ubuntu/Linux Users**
 ```bash
-# Clone or download the application
-cd gleamvideo-studio
+# Run the automated setup:
+./start_gleamvideo.sh
 
-# Run the enhanced setup script
-./run.sh
+# Or use the universal launcher:
+python3 launch.py
+```
+
+#### **🍎 macOS Users**
+```bash
+# Install dependencies first (if needed):
+brew install python firefox ffmpeg
+
+# Run the universal launcher:
+python3 launch.py
+```
+
+### 🔧 Manual Installation (All Platforms)
+```bash
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Start the application
+python gleamvideo.py
 ```
 
 ### 2. Access the Application
