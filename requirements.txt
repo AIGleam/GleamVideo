@@ -22,4 +22,6 @@ tqdm==4.66.1
 colorama==0.4.6
 typing-extensions==4.9.0
 espeak-ng==0.1.2
+feedparser==6.0.10
+openai==1.12.0
 
