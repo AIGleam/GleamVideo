@@ -15,3 +15,7 @@ book_audio/
 chunks/
 voices.json
 kokoro-v0_19.onnx
+
+# Log files
+*.log
+app_output.log
