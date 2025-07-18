@@ -501,6 +501,7 @@
             } catch (error) {
                 console.error('Error loading advanced settings:', error);
             }
+        }
 
         async function loadAvailableVoices() {
             try {
@@ -564,30 +565,31 @@
             }
         }
 
-        function saveApiKey() {
+        async function saveApiKey() {
             const apiKey = document.getElementById('apiKey').value.trim();
             
             if (!apiKey) {
                 showToast('Error', 'Please enter an API key', 'error');
                 return;
             }
-
-            fetch('/api/config/api-key', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ openrouter_api_key: apiKey })
-            })
-            .then(response => response.json())
-            .then(data => {
+            
+            try {
+                const response = await fetch('/api/config/api-key', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ openrouter_api_key: apiKey })
+                });
+                
+                const data = await response.json();
                 if (data.success) {
                     showToast('Success', 'API key saved successfully', 'success');
                 } else {
                     showToast('Error', data.error || 'Failed to save API key', 'error');
                 }
-            })
-            .catch(error => {
-                showToast('Error', 'Network error: ' + error.message, 'error');
-            });
+            } catch (error) {
+                console.error('Error saving API key:', error);
+                showToast('Error', 'Failed to save API key', 'error');
+            }
         }
 
         function toggleAutoMode() {
