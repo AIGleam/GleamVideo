@@ -104,11 +104,44 @@ def setup_directories():
     """Create required directories"""
     print_colored("📁 Setting up directories...", "cyan")
     
-    directories = ["videos", "screenshots", "temp"]
+    directories = ["videos", "screenshots", "temp", "checkpoints"]
     for directory in directories:
         Path(directory).mkdir(exist_ok=True)
     
     print_colored("✅ Directories created", "green")
+
+def download_index_tts_models():
+    """Download Index-TTS models if needed"""
+    print_colored("🎙️ Setting up Index-TTS...", "cyan")
+    
+    # First, try to install Index-TTS if not already installed
+    try:
+        import indextts.infer
+        print_colored("✅ Index-TTS already installed", "green")
+    except ImportError:
+        print_colored("📦 Installing Index-TTS...", "cyan")
+        try:
+            result = subprocess.run([sys.executable, "install_index_tts.py"], 
+                                  capture_output=True, text=True, timeout=600)
+            if result.returncode == 0:
+                print_colored("✅ Index-TTS installed successfully", "green")
+            else:
+                print_colored("⚠️  Index-TTS installation had warnings", "yellow")
+        except Exception as e:
+            print_colored(f"⚠️  Index-TTS installation warning: {e}", "yellow")
+    
+    # Then download models
+    try:
+        result = subprocess.run([sys.executable, "download_index_tts.py"], 
+                              capture_output=True, text=True, timeout=300)
+        if result.returncode == 0:
+            print_colored("✅ Index-TTS models ready", "green")
+        else:
+            print_colored("⚠️  Index-TTS model setup completed with warnings", "yellow")
+    except subprocess.TimeoutExpired:
+        print_colored("⚠️  Index-TTS download timeout - continuing anyway", "yellow")
+    except Exception as e:
+        print_colored(f"⚠️  Index-TTS setup warning: {e}", "yellow")
 
 def start_application():
     """Start the GleamVideo application"""
@@ -162,6 +195,9 @@ def main():
     
     # Setup directories
     setup_directories()
+    
+    # Download Index-TTS models
+    download_index_tts_models()
     
     # Start application
     if start_application():
