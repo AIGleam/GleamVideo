@@ -235,10 +235,6 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# Initialize global instances
-auto_mode_manager = AutoModeManager()
-video_generator = EnhancedVideoGenerator()
-
 # Configure middleware
 app.add_middleware(
     CORSMiddleware,
@@ -1094,10 +1090,6 @@ class EnhancedVideoGenerator:
             logger.error(f"Error combining clips: {e}")
             return False
 
-# Global instances
-auto_mode_manager = AutoModeManager()
-video_generator = EnhancedVideoGenerator()
-
 # ---------------------------------------------------------------------------
 # Pydantic Models
 # ---------------------------------------------------------------------------
@@ -1132,6 +1124,13 @@ class AutoModeConfig(BaseModel):
     interval_hours: int = 1
     rss_feeds: List[str] = []
     voice: str = "female"
+
+# ---------------------------------------------------------------------------
+# Global Instances (initialized after class definitions)
+# ---------------------------------------------------------------------------
+# Initialize global instances
+auto_mode_manager = AutoModeManager()
+video_generator = EnhancedVideoGenerator()
 
 # ---------------------------------------------------------------------------
 # API Endpoints
