@@ -34,16 +34,24 @@ def download_index_tts_model():
         
         logger.info("Downloading Index-TTS model from HuggingFace...")
         
-        # Download the model repository
-        # Using a common Index-TTS model - this can be adjusted based on available models
-        model_repo = "IndexTeam/Index-1.9B"  # Replace with actual Index-TTS model repo
+        # Download the correct Index-TTS model repository
+        model_repo = "IndexTeam/IndexTTS-1.5"
         
         try:
             snapshot_download(
                 repo_id=model_repo,
                 local_dir=str(checkpoints_dir),
                 local_dir_use_symlinks=False,
-                resume_download=True
+                resume_download=True,
+                allow_patterns=[
+                    "config.yaml",
+                    "gpt.pth",
+                    "dvae.pth",
+                    "bigvgan_generator.pth",
+                    "bigvgan_discriminator.pth",
+                    "bpe.model",
+                    "unigram_12000.vocab"
+                ]
             )
             logger.info("Index-TTS model downloaded successfully")
             return True
