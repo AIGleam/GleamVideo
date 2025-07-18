@@ -194,6 +194,63 @@
                     </div>
                 </div>
 
+                <!-- Enhanced Reddit Configuration Card -->
+                <div class="glass-effect rounded-2xl p-6 card-shadow border border-slate-700/50">
+                    <div class="flex items-center space-x-3 mb-6">
+                        <div class="p-2 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg">
+                            <i class="fab fa-reddit text-white text-lg"></i>
+                        </div>
+                        <h2 class="text-xl font-semibold">Reddit Reaction Settings</h2>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-2 text-slate-300">Target Subreddit</label>
+                                <input type="text" id="targetSubreddit" value="technology" 
+                                       class="w-full px-3 py-3 modern-input rounded-xl focus:outline-none text-white"
+                                       placeholder="technology">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-2 text-slate-300">Video Length (seconds)</label>
+                                <input type="number" id="videoLength" value="180" min="30" max="3600"
+                                       class="w-full px-3 py-3 modern-input rounded-xl focus:outline-none text-white">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-2 text-slate-300">Commentary Style</label>
+                                <select id="commentaryStyle" 
+                                        class="w-full px-3 py-3 modern-input rounded-xl focus:outline-none text-white">
+                                    <option value="funny_vulgar">Funny & Edgy</option>
+                                    <option value="analytical">Analytical</option>
+                                    <option value="casual">Casual</option>
+                                    <option value="professional">Professional</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-2 text-slate-300">Reaction Personality</label>
+                                <select id="reactionPersonality" 
+                                        class="w-full px-3 py-3 modern-input rounded-xl focus:outline-none text-white">
+                                    <option value="sarcastic_reviewer">Sarcastic Reviewer</option>
+                                    <option value="enthusiastic_commentator">Enthusiastic Commentator</option>
+                                    <option value="analytical_roaster">Analytical Roaster</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2 text-slate-300">Specific Reddit Posts (one URL per line)</label>
+                            <textarea id="specificPosts" rows="3" 
+                                      class="w-full px-4 py-3 modern-input rounded-xl focus:outline-none text-white placeholder-slate-400 resize-none"
+                                      placeholder="https://www.reddit.com/r/technology/comments/...&#10;https://www.reddit.com/r/science/comments/..."></textarea>
+                            <p class="text-xs text-slate-400 mt-1">Leave empty to use trending posts from target subreddit</p>
+                        </div>
+                        <button onclick="saveRedditConfig()" 
+                                class="w-full px-6 py-3 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 rounded-xl transition-all font-medium text-white">
+                            <i class="fas fa-save mr-2"></i>Save Reddit Settings
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Auto Mode Card -->
                 <div class="glass-effect rounded-2xl p-6 card-shadow border border-slate-700/50">
                     <div class="flex items-center justify-between mb-6">
@@ -212,16 +269,11 @@
                         </label>
                     </div>
                     <div class="space-y-4">
-                        <p class="text-slate-300">Automatically monitors Reddit RSS feeds and generates video content using AI</p>
-                        <div class="grid grid-cols-3 gap-4">
+                        <p class="text-slate-300">Automatically generates reaction videos from your configured Reddit settings</p>
+                        <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-sm font-medium mb-2 text-slate-300">Interval (hours)</label>
                                 <input type="number" id="autoInterval" value="1" min="1" max="24"
-                                       class="w-full px-3 py-3 modern-input rounded-xl focus:outline-none text-white">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium mb-2 text-slate-300">Reddit Subreddit</label>
-                                <input type="text" id="subreddit" value="technology" 
                                        class="w-full px-3 py-3 modern-input rounded-xl focus:outline-none text-white">
                             </div>
                             <div>
@@ -237,13 +289,51 @@
                         <div class="flex space-x-3">
                             <button onclick="runAutoNow()" id="runAutoBtn"
                                     class="flex-1 px-4 py-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 rounded-xl transition-all transform hover:scale-105 font-medium">
-                                <i class="fas fa-play mr-2"></i>Run Auto Generation Now
+                                <i class="fas fa-play mr-2"></i>Generate Reaction Now
                             </button>
                             <button onclick="stopAutoMode()" id="stopAutoBtn"
                                     class="px-4 py-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 rounded-xl transition-all transform hover:scale-105 font-medium">
                                 <i class="fas fa-stop mr-2"></i>Stop
                             </button>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Quick Reddit Reaction Card -->
+                <div class="glass-effect rounded-2xl p-6 card-shadow border border-slate-700/50">
+                    <div class="flex items-center space-x-3 mb-6">
+                        <div class="p-2 bg-gradient-to-r from-green-500 to-teal-500 rounded-lg">
+                            <i class="fas fa-bolt text-white text-lg"></i>
+                        </div>
+                        <h2 class="text-xl font-semibold">Quick Reddit Reaction</h2>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-2 text-slate-300">Reddit Post URL</label>
+                            <input type="url" id="quickRedditUrl" 
+                                   class="w-full px-4 py-3 modern-input rounded-xl focus:outline-none text-white placeholder-slate-400"
+                                   placeholder="https://www.reddit.com/r/technology/comments/...">
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-2 text-slate-300">Video Length (seconds)</label>
+                                <input type="number" id="quickVideoLength" value="180" min="30" max="3600"
+                                       class="w-full px-3 py-3 modern-input rounded-xl focus:outline-none text-white">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-2 text-slate-300">Voice</label>
+                                <select id="quickVoice" 
+                                        class="w-full px-3 py-3 modern-input rounded-xl focus:outline-none text-white">
+                                    <option value="female">Female</option>
+                                    <option value="male">Male</option>
+                                    <option value="neutral">Neutral</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button onclick="generateQuickReaction()" id="quickReactionBtn"
+                                class="w-full px-6 py-4 bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 rounded-xl transition-all font-medium text-white">
+                            <i class="fas fa-magic mr-2"></i>Generate Reaction Video
+                        </button>
                     </div>
                 </div>
 
@@ -292,6 +382,12 @@
                                     <option value="male">Male</option>
                                     <option value="neutral">Neutral</option>
                                 </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-2 text-slate-300">Target Length (seconds)</label>
+                                <input type="number" id="targetLength" min="30" max="3600" 
+                                       class="w-full px-3 py-3 modern-input rounded-xl focus:outline-none text-white placeholder-slate-400"
+                                       placeholder="Auto">
                             </div>
                         </div>
                         <div>
@@ -939,6 +1035,169 @@
                 toast.classList.add('hidden');
             }, 4000);
         }
+
+        // Enhanced Reddit Configuration Functions
+        async function saveRedditConfig() {
+            try {
+                const config = {
+                    target_subreddit: document.getElementById('targetSubreddit').value,
+                    video_length_target: parseInt(document.getElementById('videoLength').value),
+                    commentary_style: document.getElementById('commentaryStyle').value,
+                    reaction_personality: document.getElementById('reactionPersonality').value,
+                    specific_reddit_posts: document.getElementById('specificPosts').value
+                        .split('\n')
+                        .map(url => url.trim())
+                        .filter(url => url)
+                };
+
+                const response = await fetch('/api/config/reddit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(config)
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    showToast('Success', 'Reddit settings saved successfully', 'success');
+                } else {
+                    showToast('Error', data.error || 'Failed to save Reddit settings', 'error');
+                }
+            } catch (error) {
+                console.error('Error saving Reddit config:', error);
+                showToast('Error', 'Failed to save Reddit settings', 'error');
+            }
+        }
+
+        async function loadRedditConfig() {
+            try {
+                const response = await fetch('/api/config/reddit');
+                const data = await response.json();
+
+                if (data.target_subreddit) {
+                    document.getElementById('targetSubreddit').value = data.target_subreddit;
+                }
+                if (data.video_length_target) {
+                    document.getElementById('videoLength').value = data.video_length_target;
+                }
+                if (data.commentary_style) {
+                    document.getElementById('commentaryStyle').value = data.commentary_style;
+                }
+                if (data.reaction_personality) {
+                    document.getElementById('reactionPersonality').value = data.reaction_personality;
+                }
+                if (data.specific_reddit_posts && data.specific_reddit_posts.length > 0) {
+                    document.getElementById('specificPosts').value = data.specific_reddit_posts.join('\n');
+                }
+            } catch (error) {
+                console.error('Error loading Reddit config:', error);
+            }
+        }
+
+        async function generateQuickReaction() {
+            const redditUrl = document.getElementById('quickRedditUrl').value;
+            const videoLength = parseInt(document.getElementById('quickVideoLength').value);
+            const voice = document.getElementById('quickVoice').value;
+
+            if (!redditUrl) {
+                showToast('Error', 'Please enter a Reddit post URL', 'error');
+                return;
+            }
+
+            if (!redditUrl.includes('reddit.com/r/')) {
+                showToast('Error', 'Please enter a valid Reddit post URL', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/generate/reddit-reaction', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        reddit_url: redditUrl,
+                        video_length: videoLength,
+                        voice: voice
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    showToast('Success', 'Reddit reaction generation started!', 'success');
+                    document.getElementById('quickRedditUrl').value = '';
+                } else {
+                    showToast('Error', data.error || 'Failed to start generation', 'error');
+                }
+            } catch (error) {
+                console.error('Error generating quick reaction:', error);
+                showToast('Error', 'Failed to start generation', 'error');
+            }
+        }
+
+        // Enhanced form submission for manual video generation
+        function submitVideoForm() {
+            const form = document.getElementById('videoForm');
+            const formData = new FormData();
+            
+            // Get paragraphs
+            const paragraphsText = document.getElementById('paragraphs').value;
+            const paragraphs = paragraphsText.split('\n').filter(p => p.trim());
+            
+            // Get links
+            const linksText = document.getElementById('links').value;
+            const links = linksText.split('\n').filter(l => l.trim());
+            
+            // Add form data
+            paragraphs.forEach(p => formData.append('paragraphs', p));
+            links.forEach(l => formData.append('links', l));
+            
+            formData.append('output_name', document.getElementById('outputName').value || 'generated-video.mp4');
+            formData.append('resolution', document.getElementById('resolution').value);
+            formData.append('transition_duration', document.getElementById('transitionDuration').value);
+            formData.append('voice', document.getElementById('voice').value);
+            
+            // Add target length if specified
+            const targetLength = document.getElementById('targetLength').value;
+            if (targetLength) {
+                formData.append('target_duration', targetLength);
+            }
+            
+            // Submit form
+            fetch('/generate_video', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Success', 'Video generation started!', 'success');
+                    form.reset();
+                } else {
+                    showToast('Error', data.error || 'Failed to start generation', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showToast('Error', 'Failed to start generation', 'error');
+            });
+        }
+
+        // Initialize enhanced features on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load Reddit configuration
+            loadRedditConfig();
+            
+            // Override form submission
+            const form = document.getElementById('videoForm');
+            if (form) {
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    submitVideoForm();
+                });
+            }
+        });
     </script>
 </body>
 </html>

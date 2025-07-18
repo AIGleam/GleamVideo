@@ -93,6 +93,60 @@ def ensure_cross_platform_path(path_str: str) -> str:
     return str(Path(path_str).resolve())
 
 # ---------------------------------------------------------------------------
+# Enhanced TTS Text Formatting
+# ---------------------------------------------------------------------------
+class TTSTextFormatter:
+    """Enhanced text formatter for TTS-friendly output"""
+    
+    @staticmethod
+    def format_for_tts(text: str) -> str:
+        """Format text to be more TTS-friendly"""
+        # Replace common contractions that sound weird
+        text = re.sub(r"\bI'm\b", "I am", text)
+        text = re.sub(r"\byou're\b", "you are", text)
+        text = re.sub(r"\bwe're\b", "we are", text)
+        text = re.sub(r"\bthey're\b", "they are", text)
+        text = re.sub(r"\bcan't\b", "cannot", text)
+        text = re.sub(r"\bwon't\b", "will not", text)
+        text = re.sub(r"\bdon't\b", "do not", text)
+        text = re.sub(r"\bdidn't\b", "did not", text)
+        text = re.sub(r"\bhasn't\b", "has not", text)
+        text = re.sub(r"\bhaven't\b", "have not", text)
+        text = re.sub(r"\bisn't\b", "is not", text)
+        text = re.sub(r"\baren't\b", "are not", text)
+        text = re.sub(r"\bwasn't\b", "was not", text)
+        text = re.sub(r"\bweren't\b", "were not", text)
+        text = re.sub(r"\bshouldn't\b", "should not", text)
+        text = re.sub(r"\bwouldn't\b", "would not", text)
+        text = re.sub(r"\bcouldn't\b", "could not", text)
+        
+        # Handle common abbreviations
+        text = re.sub(r"\bvs\.\b", "versus", text)
+        text = re.sub(r"\betc\.\b", "etcetera", text)
+        text = re.sub(r"\bi\.e\.\b", "that is", text)
+        text = re.sub(r"\be\.g\.\b", "for example", text)
+        text = re.sub(r"\bMr\.\b", "Mister", text)
+        text = re.sub(r"\bMrs\.\b", "Missus", text)
+        text = re.sub(r"\bDr\.\b", "Doctor", text)
+        
+        # Handle URLs and subreddits
+        text = re.sub(r"r/([a-zA-Z0-9_]+)", r"r slash \1", text)
+        text = re.sub(r"u/([a-zA-Z0-9_]+)", r"u slash \1", text)
+        text = re.sub(r"https?://[^\s]+", "link", text)
+        
+        # Handle numbers and units
+        text = re.sub(r"\b(\d+)k\b", r"\1 thousand", text)
+        text = re.sub(r"\b(\d+)m\b", r"\1 million", text)
+        text = re.sub(r"\b(\d+)b\b", r"\1 billion", text)
+        text = re.sub(r"\b(\d+)%", r"\1 percent", text)
+        
+        # Add pauses for better flow
+        text = re.sub(r"[.!?]\s+", ". ", text)
+        text = re.sub(r",\s+", ", ", text)
+        
+        return text.strip()
+
+# ---------------------------------------------------------------------------
 # Configuration and Global Variables
 # ---------------------------------------------------------------------------
 
@@ -109,6 +163,11 @@ class AppConfig:
         self.auto_mode_enabled = False
         self.auto_mode_interval = 3600  # 1 hour
         self.auto_mode_voice = "female"  # Default voice for auto mode
+        self.target_subreddit = "technology"  # User-specified subreddit
+        self.video_length_target = 180  # Target video length in seconds (3 minutes)
+        self.commentary_style = "funny_vulgar"  # Commentary style
+        self.specific_reddit_posts = []  # List of specific Reddit post URLs
+        self.reaction_personality = "sarcastic_reviewer"  # AI personality for reactions
 
 app_config = AppConfig()
 
@@ -120,12 +179,78 @@ progress_data = {
     "current_task": ""
 }
 
+# ---------------------------------------------------------------------------
+# Helper Functions for Enhanced Features
+# ---------------------------------------------------------------------------
+async def generate_specific_reddit_reaction(reddit_url: str, video_length: int, voice: str):
+    """Generate a reaction video for a specific Reddit post"""
+    try:
+        update_progress("working", "Fetching Reddit content...", 10, "Reddit Fetch")
+        
+        # Fetch the specific Reddit post
+        content = await auto_mode_manager.fetch_specific_reddit_post(reddit_url)
+        
+        if not content:
+            update_progress("error", "Failed to fetch Reddit content", 0, "Error")
+            return
+        
+        update_progress("working", "Generating reaction script...", 30, "AI Processing")
+        
+        # Generate reaction
+        ai_client = GeminiClient(app_config.openrouter_api_key)
+        script = await ai_client.generate_reddit_reaction(content, video_length)
+        segments = await ai_client.generate_timed_content(script, video_length)
+        
+        update_progress("working", "Creating video...", 60, "Video Generation")
+        
+        # Create video
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        subreddit = content.get('subreddit', 'reddit')
+        output_name = f"reaction_{subreddit}_{timestamp}.mp4"
+        
+        video_generator = EnhancedVideoGenerator()
+        success = await video_generator.create_video(
+            paragraphs=segments,
+            links=[content.get('link', '')],
+            output_name=output_name,
+            resolution="1920x1080",
+            transition_duration=2.0,
+            voice=voice,
+            target_duration=video_length
+        )
+        
+        if success:
+            update_progress("done", f"Reaction video created: {output_name}", 100, "Complete")
+        else:
+            update_progress("error", "Video generation failed", 0, "Error")
+            
+    except Exception as e:
+        logger.error(f"Error in specific Reddit reaction generation: {e}")
+        update_progress("error", f"Generation failed: {str(e)}", 0, "Error")
+
 # Application instances
 app = FastAPI(
     title="GleamVideo Enhanced",
     description="AI-Powered Video Generation Platform",
     version="2.0.0"
 )
+
+# Initialize global instances
+auto_mode_manager = AutoModeManager()
+video_generator = EnhancedVideoGenerator()
+
+# Configure middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Mount static files
+app.mount("/videos", StaticFiles(directory="videos"), name="videos")
 
 def update_progress(status: str, message: str, pct: float, current_task: str = ""):
     """Update global progress state"""
@@ -185,6 +310,91 @@ class GeminiClient:
         except Exception as e:
             logger.error(f"Error calling Gemini API: {e}")
             raise
+    
+    async def generate_reddit_reaction(self, reddit_content: Dict, target_length: int = 180) -> str:
+        """Generate a reaction/commentary video script for Reddit content"""
+        
+        # Enhanced system prompts based on personality
+        personality_prompts = {
+            "sarcastic_reviewer": """You are a sarcastic, witty content reviewer who reacts to Reddit posts. 
+            You're not afraid to be a bit vulgar (but not overly offensive) and use humor to engage viewers.
+            You point out absurdities, make clever observations, and aren't afraid to call out bullshit when you see it.
+            Keep your reactions authentic and entertaining. Use natural speech patterns that work well with text-to-speech.
+            Avoid hard-to-pronounce words and use contractions that sound natural when spoken.""",
+            
+            "enthusiastic_commentator": """You are an enthusiastic, energetic commentator who gets excited about Reddit content.
+            You're funny, a bit edgy, and love to share your genuine reactions. You use casual language and aren't afraid
+            to be a bit crude when it fits. Your goal is to entertain while providing actual commentary on the content.""",
+            
+            "analytical_roaster": """You are someone who deeply analyzes Reddit content but with a humorous, roasting twist.
+            You're intelligent but not pretentious, funny but not trying too hard. You call out logical fallacies,
+            point out contradictions, and aren't afraid to use colorful language when the situation calls for it."""
+        }
+        
+        system_prompt = personality_prompts.get(app_config.reaction_personality, personality_prompts["sarcastic_reviewer"])
+        
+        # Calculate target word count (roughly 150-180 words per minute of speech)
+        target_words = (target_length // 60) * 165
+        
+        content_prompt = f"""
+        React to this Reddit post from r/{app_config.target_subreddit}:
+        
+        Title: {reddit_content.get('title', 'No title')}
+        Content: {reddit_content.get('content', reddit_content.get('summary', 'No content'))}
+        
+        Create a {target_length}-second reaction video script (approximately {target_words} words).
+        
+        Your reaction should:
+        1. Actually READ and respond to the specific content (don't just summarize)
+        2. Include your genuine thoughts and opinions
+        3. Be entertaining and engaging
+        4. Use natural speech that sounds good with text-to-speech
+        5. Include some humor and personality
+        6. Feel like a real person reacting, not a robot reading
+        7. Point out interesting details or issues with the content
+        8. Be conversational and authentic
+        
+        Avoid:
+        - Just reading the content back
+        - Being overly polite or corporate
+        - Using complex words that are hard to pronounce
+        - Generic reactions that could apply to any post
+        
+        Write this as a natural monologue, like you're talking to a friend about what you just read.
+        """
+        
+        return await self.generate_content(content_prompt, system_prompt)
+    
+    async def generate_timed_content(self, content: str, target_duration: int) -> List[str]:
+        """Break content into time-appropriate segments"""
+        
+        # Estimate words per minute for speech (average 150-180 WPM)
+        words_per_minute = 165
+        target_words = (target_duration // 60) * words_per_minute
+        
+        # If content is too short, expand it
+        if len(content.split()) < target_words * 0.8:
+            expansion_prompt = f"""
+            Take this content and expand it to approximately {target_words} words while maintaining 
+            the same tone and style. Add more details, examples, and natural commentary:
+            
+            {content}
+            
+            Make sure the expansion feels natural and doesn't just add filler words.
+            """
+            content = await self.generate_content(expansion_prompt)
+        
+        # Break into segments of roughly 30-45 seconds each
+        words = content.split()
+        segment_size = words_per_minute // 2  # ~30 seconds worth of words
+        
+        segments = []
+        for i in range(0, len(words), segment_size):
+            segment = " ".join(words[i:i + segment_size])
+            if segment.strip():
+                segments.append(segment.strip())
+        
+        return segments
 
 # ---------------------------------------------------------------------------
 # Enhanced Screenshot System with Multiple Angles
@@ -341,17 +551,22 @@ class TTSManager:
             return ["female", "male", "neutral"]
     
     def generate_speech(self, text: str, output_file: str, voice: str = "female") -> bool:
-        """Generate speech from text"""
+        """Generate speech from text with enhanced formatting"""
         try:
+            # Format text for better TTS output
+            formatted_text = TTSTextFormatter.format_for_tts(text)
+            
             if self.index_tts_model and voice in self.available_voices:
-                # Use Index-TTS
-                self.index_tts_model.infer(voice, text, output_file)
+                # Use Index-TTS with formatted text
+                self.index_tts_model.infer(voice, formatted_text, output_file)
                 logger.info(f"Speech generated: {output_file}")
                 return True
             else:
                 # Fallback to system TTS or silence
                 logger.warning("TTS not available, generating silence")
-                duration = len(text) * 0.1  # Rough estimate
+                # Estimate duration based on word count (average 165 WPM)
+                word_count = len(formatted_text.split())
+                duration = (word_count / 165) * 60  # More accurate duration estimate
                 silence = np.zeros(int(24000 * duration))
                 sf.write(output_file, silence, 24000)
                 return True
@@ -450,12 +665,20 @@ class AutoModeManager:
             update_progress("error", f"Auto generation failed: {str(e)}", 0, "Error")
     
     async def fetch_trending_content(self) -> Optional[Dict]:
-        """Fetch trending content from RSS feeds"""
+        """Fetch trending content from RSS feeds or specific posts"""
         try:
-            for feed_url in app_config.reddit_rss_feeds[:2]:  # Limit to 2 feeds
+            # First, check if user has specified specific Reddit posts
+            if app_config.specific_reddit_posts:
+                return await self.fetch_specific_reddit_post(app_config.specific_reddit_posts[0])
+            
+            # Build RSS feed URL for target subreddit
+            target_feed_url = f"https://www.reddit.com/r/{app_config.target_subreddit}/.rss"
+            feeds_to_check = [target_feed_url] + app_config.reddit_rss_feeds[:2]
+            
+            for feed_url in feeds_to_check:
                 try:
                     async with aiohttp.ClientSession() as session:
-                        async with session.get(feed_url) as response:
+                        async with session.get(feed_url, headers={'User-Agent': 'GleamVideo Bot 2.0'}) as response:
                             if response.status == 200:
                                 feed_data = await response.text()
                                 feed = feedparser.parse(feed_data)
@@ -463,11 +686,25 @@ class AutoModeManager:
                                 if feed.entries:
                                     # Get first trending entry
                                     entry = feed.entries[0]
+                                    
+                                    # Extract more content from the entry
+                                    content_text = ""
+                                    if hasattr(entry, 'content') and entry.content:
+                                        content_text = entry.content[0].value if isinstance(entry.content, list) else str(entry.content)
+                                    elif hasattr(entry, 'summary'):
+                                        content_text = entry.summary
+                                    
+                                    # Clean up HTML if present
+                                    content_text = re.sub(r'<[^>]+>', '', content_text)
+                                    content_text = re.sub(r'&[a-zA-Z0-9#]+;', '', content_text)
+                                    
                                     return {
                                         "title": entry.title,
+                                        "content": content_text or entry.title,
                                         "summary": entry.summary if hasattr(entry, 'summary') else entry.title,
                                         "link": entry.link,
-                                        "source": feed_url
+                                        "source": feed_url,
+                                        "subreddit": app_config.target_subreddit
                                     }
                 except Exception as e:
                     logger.error(f"Error fetching from {feed_url}: {e}")
@@ -479,42 +716,86 @@ class AutoModeManager:
             logger.error(f"Error fetching trending content: {e}")
             return None
     
+    async def fetch_specific_reddit_post(self, post_url: str) -> Optional[Dict]:
+        """Fetch content from a specific Reddit post URL"""
+        try:
+            # Convert Reddit URL to RSS format if needed
+            if '/comments/' in post_url:
+                rss_url = post_url + '.rss'
+            else:
+                rss_url = post_url
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(rss_url, headers={'User-Agent': 'GleamVideo Bot 2.0'}) as response:
+                    if response.status == 200:
+                        feed_data = await response.text()
+                        feed = feedparser.parse(feed_data)
+                        
+                        if feed.entries:
+                            entry = feed.entries[0]
+                            
+                            # Extract content
+                            content_text = ""
+                            if hasattr(entry, 'content') and entry.content:
+                                content_text = entry.content[0].value if isinstance(entry.content, list) else str(entry.content)
+                            elif hasattr(entry, 'summary'):
+                                content_text = entry.summary
+                            
+                            # Clean up HTML
+                            content_text = re.sub(r'<[^>]+>', '', content_text)
+                            content_text = re.sub(r'&[a-zA-Z0-9#]+;', '', content_text)
+                            
+                            # Extract subreddit from URL
+                            subreddit_match = re.search(r'/r/([^/]+)/', post_url)
+                            subreddit = subreddit_match.group(1) if subreddit_match else app_config.target_subreddit
+                            
+                            return {
+                                "title": entry.title,
+                                "content": content_text or entry.title,
+                                "summary": entry.summary if hasattr(entry, 'summary') else entry.title,
+                                "link": entry.link,
+                                "source": post_url,
+                                "subreddit": subreddit
+                            }
+            
+            return None
+        except Exception as e:
+            logger.error(f"Error fetching specific Reddit post: {e}")
+            return None
+    
     async def generate_auto_video(self, content: Dict):
-        """Generate video from trending content"""
+        """Generate video from trending content with reactions"""
         try:
             # Initialize AI client
             ai_client = GeminiClient(app_config.openrouter_api_key)
             
-            # Generate script
-            system_prompt = """You are a content creator for engaging video scripts. 
-            Create a compelling, informative script based on the provided content. 
-            The script should be engaging, factual, and suitable for a 2-3 minute video.
-            Format the response as a clear narrative without special formatting."""
+            # Generate reaction script using the enhanced method
+            script = await ai_client.generate_reddit_reaction(content, app_config.video_length_target)
             
-            prompt = f"Create an engaging video script about: {content['title']}\n\nSummary: {content['summary']}"
-            
-            script = await ai_client.generate_content(prompt, system_prompt)
+            # Break script into time-appropriate segments
+            segments = await ai_client.generate_timed_content(script, app_config.video_length_target)
             
             # Create video with generated content
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_name = f"auto_video_{timestamp}.mp4"
+            subreddit = content.get('subreddit', app_config.target_subreddit)
+            output_name = f"reaction_{subreddit}_{timestamp}.mp4"
             
-            # Use the main video generation function
-            paragraphs = [script[:500], script[500:1000]] if len(script) > 500 else [script]
+            # Use the segments as paragraphs
             links = [content.get('link', '')] if content.get('link') else []
             
             video_generator = EnhancedVideoGenerator()
             success = await video_generator.create_video(
-                paragraphs=paragraphs,
+                paragraphs=segments,
                 links=links,
                 output_name=output_name,
                 resolution="1920x1080",
                 transition_duration=2.0,
-                voice=getattr(app_config, 'auto_mode_voice', 'female')
+                voice=getattr(app_config, 'auto_mode_voice', 'female'),
+                target_duration=app_config.video_length_target
             )
             
             if success:
-                logger.info(f"Auto video generated successfully: {output_name}")
+                logger.info(f"Auto reaction video generated successfully: {output_name}")
             else:
                 logger.error("Auto video generation failed")
                 
@@ -582,7 +863,8 @@ class EnhancedVideoGenerator:
                           output_name: str = "generated_video.mp4",
                           resolution: str = "1920x1080", 
                           transition_duration: float = 2.0,
-                          voice: str = "female") -> bool:
+                          voice: str = "female",
+                          target_duration: int = None) -> bool:
         """Create video from paragraphs and links"""
         temp_dir = None
         try:
@@ -841,6 +1123,17 @@ async def index():
         return HTMLResponse(content="<h1>Error: index.html not found</h1>", status_code=404)
 
 # ---------------------------------------------------------------------------
+# Data Models
+# ---------------------------------------------------------------------------
+class APIKeyConfig(BaseModel):
+    openrouter_api_key: str
+
+class AutoModeConfig(BaseModel):
+    interval_hours: int = 1
+    rss_feeds: List[str] = []
+    voice: str = "female"
+
+# ---------------------------------------------------------------------------
 # API Endpoints
 # ---------------------------------------------------------------------------
 @app.post("/api/config/api-key")
@@ -935,6 +1228,66 @@ async def list_voices():
         logger.error(f"Error getting voices: {e}")
         return {"voices": ["female", "male", "neutral"]}
 
+# Enhanced configuration endpoints
+@app.post("/api/config/reddit")
+async def set_reddit_config(config: dict):
+    """Set Reddit-specific configuration"""
+    try:
+        if 'target_subreddit' in config:
+            app_config.target_subreddit = config['target_subreddit']
+        
+        if 'video_length_target' in config:
+            app_config.video_length_target = max(30, min(3600, config['video_length_target']))
+        
+        if 'commentary_style' in config:
+            app_config.commentary_style = config['commentary_style']
+        
+        if 'reaction_personality' in config:
+            app_config.reaction_personality = config['reaction_personality']
+        
+        if 'specific_reddit_posts' in config:
+            app_config.specific_reddit_posts = config['specific_reddit_posts']
+        
+        logger.info("Reddit configuration updated")
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Error setting Reddit config: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/config/reddit")
+async def get_reddit_config():
+    """Get current Reddit configuration"""
+    return {
+        "target_subreddit": app_config.target_subreddit,
+        "video_length_target": app_config.video_length_target,
+        "commentary_style": app_config.commentary_style,
+        "reaction_personality": app_config.reaction_personality,
+        "specific_reddit_posts": app_config.specific_reddit_posts
+    }
+
+@app.post("/api/generate/reddit-reaction")
+async def generate_reddit_reaction(request: dict):
+    """Generate a reaction video for specific Reddit content"""
+    try:
+        if not app_config.openrouter_api_key:
+            return {"success": False, "error": "OpenRouter API key not configured"}
+        
+        reddit_url = request.get('reddit_url')
+        video_length = request.get('video_length', app_config.video_length_target)
+        voice = request.get('voice', 'female')
+        
+        if not reddit_url:
+            return {"success": False, "error": "Reddit URL required"}
+        
+        # Start generation in background
+        asyncio.create_task(generate_specific_reddit_reaction(reddit_url, video_length, voice))
+        
+        return {"success": True, "message": "Reddit reaction generation started"}
+        
+    except Exception as e:
+        logger.error(f"Error starting Reddit reaction generation: {e}")
+        return {"success": False, "error": str(e)}
+
 @app.get("/api/videos/list")
 async def list_videos():
     """List generated videos"""
@@ -1023,7 +1376,8 @@ async def generate_video(
     output_name: str = Form(default="generated-video.mp4"),
     resolution: str = Form(default="1920x1080"),
     transition_duration: float = Form(default=2.0),
-    voice: str = Form(default="female")
+    voice: str = Form(default="female"),
+    target_duration: int = Form(default=None)
 ):
     """Generate video from form data"""
     try:
@@ -1046,7 +1400,8 @@ async def generate_video(
             output_name=output_name,
             resolution=resolution,
             transition_duration=transition_duration,
-            voice=voice
+            voice=voice,
+            target_duration=target_duration
         ))
         
         return {"success": True, "message": "Video generation started"}
