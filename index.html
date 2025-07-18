@@ -156,6 +156,44 @@
                     </div>
                 </div>
 
+                <!-- Advanced Settings Card -->
+                <div class="glass-effect rounded-2xl p-6 card-shadow border border-slate-700/50">
+                    <div class="flex items-center space-x-3 mb-6">
+                        <div class="p-2 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-lg">
+                            <i class="fas fa-cog text-white text-lg"></i>
+                        </div>
+                        <h2 class="text-xl font-semibold">Advanced Settings</h2>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-2 text-slate-300">Default Resolution</label>
+                                <select id="defaultResolution" 
+                                        class="w-full px-3 py-3 modern-input rounded-xl focus:outline-none text-white">
+                                    <option value="1920x1080">1920x1080 (Full HD)</option>
+                                    <option value="1280x720">1280x720 (HD)</option>
+                                    <option value="3840x2160">3840x2160 (4K)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-2 text-slate-300">Default Transition</label>
+                                <input type="range" id="defaultTransition" min="1" max="5" value="2" step="0.5"
+                                       class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                                <span id="defaultTransitionValue" class="text-sm text-slate-400">2.0s</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2 text-slate-300">Multiple RSS Feeds (one per line)</label>
+                            <textarea id="rssFeeds" rows="3" placeholder="https://www.reddit.com/r/technology/.rss"
+                                      class="w-full px-4 py-3 modern-input rounded-xl focus:outline-none text-white placeholder-slate-400 resize-none"></textarea>
+                        </div>
+                        <button onclick="saveAdvancedSettings()" 
+                                class="w-full px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 rounded-xl transition-all font-medium text-white">
+                            <i class="fas fa-save mr-2"></i>Save Advanced Settings
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Auto Mode Card -->
                 <div class="glass-effect rounded-2xl p-6 card-shadow border border-slate-700/50">
                     <div class="flex items-center justify-between mb-6">
@@ -175,7 +213,7 @@
                     </div>
                     <div class="space-y-4">
                         <p class="text-slate-300">Automatically monitors Reddit RSS feeds and generates video content using AI</p>
-                        <div class="grid grid-cols-2 gap-4">
+                        <div class="grid grid-cols-3 gap-4">
                             <div>
                                 <label class="block text-sm font-medium mb-2 text-slate-300">Interval (hours)</label>
                                 <input type="number" id="autoInterval" value="1" min="1" max="24"
@@ -185,6 +223,15 @@
                                 <label class="block text-sm font-medium mb-2 text-slate-300">Reddit Subreddit</label>
                                 <input type="text" id="subreddit" value="technology" 
                                        class="w-full px-3 py-3 modern-input rounded-xl focus:outline-none text-white">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-2 text-slate-300">Auto Voice</label>
+                                <select id="autoVoice" 
+                                        class="w-full px-3 py-3 modern-input rounded-xl focus:outline-none text-white">
+                                    <option value="female">Female</option>
+                                    <option value="male">Male</option>
+                                    <option value="neutral">Neutral</option>
+                                </select>
                             </div>
                         </div>
                         <div class="flex space-x-3">
@@ -296,9 +343,14 @@
                             </div>
                             <h2 class="text-xl font-semibold">Generated Videos</h2>
                         </div>
-                        <button onclick="refreshVideos()" class="text-slate-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-slate-700/50">
-                            <i class="fas fa-refresh"></i>
-                        </button>
+                        <div class="flex space-x-2">
+                            <button onclick="refreshVideos()" class="text-slate-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-slate-700/50" title="Refresh videos">
+                                <i class="fas fa-refresh"></i>
+                            </button>
+                            <button onclick="clearAllVideos()" class="text-red-400 hover:text-red-300 transition-colors p-2 rounded-lg hover:bg-red-700/20" title="Clear all videos">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
                     </div>
                     <div id="videosList" class="space-y-3">
                         <div class="text-center text-slate-400 py-8">
@@ -361,6 +413,7 @@
             startProgressPolling();
             refreshVideos();
             updateAutoModeStatusFromServer();
+            loadAdvancedSettings();
         });
 
         function initializeApp() {
@@ -375,13 +428,86 @@
             
             // Load available voices
             loadAvailableVoices();
+            
+            // Setup advanced settings sliders
+            setupAdvancedSettings();
         }
+        
+        function setupAdvancedSettings() {
+            // Default transition slider
+            const defaultTransitionSlider = document.getElementById('defaultTransition');
+            const defaultTransitionDisplay = document.getElementById('defaultTransitionValue');
+            if (defaultTransitionSlider && defaultTransitionDisplay) {
+                defaultTransitionSlider.addEventListener('input', function() {
+                    defaultTransitionDisplay.textContent = this.value + 's';
+                });
+            }
+        }
+        
+        async function saveAdvancedSettings() {
+            try {
+                const settings = {
+                    defaultResolution: document.getElementById('defaultResolution').value,
+                    defaultTransition: document.getElementById('defaultTransition').value,
+                    rssFeeds: document.getElementById('rssFeeds').value.trim().split('\n').filter(url => url.trim())
+                };
+                
+                // Save to localStorage for defaults
+                localStorage.setItem('gleamvideo_advanced_settings', JSON.stringify(settings));
+                
+                // Apply defaults to form
+                document.getElementById('resolution').value = settings.defaultResolution;
+                document.getElementById('transitionDuration').value = settings.defaultTransition;
+                document.getElementById('transitionValue').textContent = settings.defaultTransition + 's';
+                
+                showToast('Success', 'Advanced settings saved', 'success');
+            } catch (error) {
+                console.error('Error saving advanced settings:', error);
+                showToast('Error', 'Failed to save settings', 'error');
+            }
+        }
+        
+        function loadAdvancedSettings() {
+            try {
+                const saved = localStorage.getItem('gleamvideo_advanced_settings');
+                if (saved) {
+                    const settings = JSON.parse(saved);
+                    
+                    if (settings.defaultResolution) {
+                        const defaultRes = document.getElementById('defaultResolution');
+                        const formRes = document.getElementById('resolution');
+                        if (defaultRes) defaultRes.value = settings.defaultResolution;
+                        if (formRes) formRes.value = settings.defaultResolution;
+                    }
+                    
+                    if (settings.defaultTransition) {
+                        const defaultTrans = document.getElementById('defaultTransition');
+                        const formTrans = document.getElementById('transitionDuration');
+                        if (defaultTrans) {
+                            defaultTrans.value = settings.defaultTransition;
+                            document.getElementById('defaultTransitionValue').textContent = settings.defaultTransition + 's';
+                        }
+                        if (formTrans) {
+                            formTrans.value = settings.defaultTransition;
+                            document.getElementById('transitionValue').textContent = settings.defaultTransition + 's';
+                        }
+                    }
+                    
+                    if (settings.rssFeeds && settings.rssFeeds.length > 0) {
+                        const rssTextarea = document.getElementById('rssFeeds');
+                        if (rssTextarea) rssTextarea.value = settings.rssFeeds.join('\n');
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading advanced settings:', error);
+            }
 
         async function loadAvailableVoices() {
             try {
                 const response = await fetch('/api/voices/list');
                 const data = await response.json();
                 
+                // Update manual video generation voice select
                 const voiceSelect = document.getElementById('voice');
                 if (voiceSelect && data.voices) {
                     // Clear existing options
@@ -393,6 +519,21 @@
                         option.value = voice;
                         option.textContent = voice.charAt(0).toUpperCase() + voice.slice(1);
                         voiceSelect.appendChild(option);
+                    });
+                }
+                
+                // Update auto mode voice select
+                const autoVoiceSelect = document.getElementById('autoVoice');
+                if (autoVoiceSelect && data.voices) {
+                    // Clear existing options
+                    autoVoiceSelect.innerHTML = '';
+                    
+                    // Add available voices
+                    data.voices.forEach(voice => {
+                        const option = document.createElement('option');
+                        option.value = voice;
+                        option.textContent = voice.charAt(0).toUpperCase() + voice.slice(1);
+                        autoVoiceSelect.appendChild(option);
                     });
                 }
             } catch (error) {
@@ -469,15 +610,17 @@
         function startAutoMode() {
             const interval = document.getElementById('autoInterval').value;
             const subreddit = document.getElementById('subreddit').value.trim();
+            const autoVoice = document.getElementById('autoVoice').value;
             
-            // Fix: Send interval_hours instead of interval, and proper enabled flag
+            // Send all auto mode configuration including voice
             fetch('/api/auto-mode/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     enabled: true,
                     interval_hours: parseInt(interval),
-                    rss_feeds: [`https://www.reddit.com/r/${subreddit || 'technology'}/.rss`]
+                    rss_feeds: [`https://www.reddit.com/r/${subreddit || 'technology'}/.rss`],
+                    voice: autoVoice
                 })
             })
             .then(response => response.json())
@@ -696,10 +839,16 @@
                                     <div class="text-xs text-slate-400">${new Date(video.created).toLocaleString()}</div>
                                     <div class="text-xs text-slate-500">${video.size}</div>
                                 </div>
-                                <a href="/api/videos/download/${video.name}" 
-                                   class="text-cyan-400 hover:text-cyan-300 p-2 rounded-lg hover:bg-slate-700/50 transition-colors">
-                                    <i class="fas fa-download"></i>
-                                </a>
+                                <div class="flex space-x-2">
+                                    <a href="/api/videos/download/${video.name}" 
+                                       class="text-cyan-400 hover:text-cyan-300 p-2 rounded-lg hover:bg-slate-700/50 transition-colors" title="Download">
+                                        <i class="fas fa-download"></i>
+                                    </a>
+                                    <button onclick="deleteVideo('${video.name}')" 
+                                            class="text-red-400 hover:text-red-300 p-2 rounded-lg hover:bg-red-700/20 transition-colors" title="Delete">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
                             </div>
                         `).join('');
                     } else if (container) {
@@ -714,6 +863,52 @@
                 .catch(error => {
                     console.error('Error fetching videos:', error);
                 });
+        }
+        
+        async function deleteVideo(filename) {
+            if (!confirm(`Are you sure you want to delete "${filename}"?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/videos/delete/${filename}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showToast('Success', 'Video deleted successfully', 'success');
+                    refreshVideos();
+                } else {
+                    showToast('Error', data.error || 'Failed to delete video', 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting video:', error);
+                showToast('Error', 'Failed to delete video', 'error');
+            }
+        }
+        
+        async function clearAllVideos() {
+            if (!confirm('Are you sure you want to delete ALL videos? This cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/videos/clear-all', {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showToast('Success', 'All videos cleared successfully', 'success');
+                    refreshVideos();
+                } else {
+                    showToast('Error', data.error || 'Failed to clear videos', 'error');
+                }
+            } catch (error) {
+                console.error('Error clearing videos:', error);
+                showToast('Error', 'Failed to clear videos', 'error');
+            }
         }
 
         function showToast(title, message, type = 'info') {

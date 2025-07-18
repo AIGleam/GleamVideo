@@ -83,14 +83,28 @@ gleamvideo/
 
 ### Voice Selection
 - Dynamic voice discovery from downloaded models
-- UI dropdown with available voices
+- UI dropdown with available voices for manual generation
+- Auto mode voice selection in settings
 - Support for custom voice models
 - Fallback to default voices (female, male, neutral)
+
+### Advanced Settings
+- Default resolution and transition duration preferences
+- Multiple RSS feeds configuration
+- Settings persistence with localStorage
+- Advanced auto mode customization
+
+### Video Management
+- Individual video deletion
+- Bulk delete all videos
+- Download functionality
+- Real-time video list updates
 
 ### Model Management
 - Automatic model download on first run
 - Checkpoints directory for model storage
 - HuggingFace Hub integration for model fetching
+- Installation automation via launcher
 
 ### Compatibility
 - Drop-in API replacement (same `infer` signature)

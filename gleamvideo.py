@@ -108,6 +108,7 @@ class AppConfig:
         ]
         self.auto_mode_enabled = False
         self.auto_mode_interval = 3600  # 1 hour
+        self.auto_mode_voice = "female"  # Default voice for auto mode
 
 app_config = AppConfig()
 
@@ -509,7 +510,7 @@ class AutoModeManager:
                 output_name=output_name,
                 resolution="1920x1080",
                 transition_duration=2.0,
-                voice="female"  # Default voice for auto generation
+                voice=getattr(app_config, 'auto_mode_voice', 'female')
             )
             
             if success:
@@ -821,6 +822,7 @@ video_generator = EnhancedVideoGenerator()
 class AutoModeConfig(BaseModel):
     interval_hours: int = 1
     rss_feeds: List[str] = []
+    voice: str = "female"
 
 class APIKeyConfig(BaseModel):
     openrouter_api_key: str
@@ -865,6 +867,9 @@ async def start_auto_mode_api(config: AutoModeConfig):
         
         if config.rss_feeds:
             app_config.reddit_rss_feeds = config.rss_feeds
+        
+        # Store voice preference for auto mode
+        app_config.auto_mode_voice = config.voice
         
         # Start auto mode
         success = await auto_mode_manager.start_auto_mode()
@@ -971,6 +976,45 @@ async def download_video(filename: str):
     except Exception as e:
         logger.error(f"Error downloading video: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/videos/delete/{filename}")
+async def delete_video(filename: str):
+    """Delete a specific video"""
+    try:
+        video_path = Path("videos") / filename
+        if not video_path.exists():
+            return {"success": False, "error": "Video not found"}
+        
+        video_path.unlink()
+        logger.info(f"Video deleted: {filename}")
+        return {"success": True, "message": f"Video '{filename}' deleted successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error deleting video {filename}: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.delete("/api/videos/clear-all")
+async def clear_all_videos():
+    """Delete all videos"""
+    try:
+        videos_dir = Path("videos")
+        if not videos_dir.exists():
+            return {"success": True, "message": "No videos to delete"}
+        
+        deleted_count = 0
+        for video_file in videos_dir.glob("*.mp4"):
+            try:
+                video_file.unlink()
+                deleted_count += 1
+            except Exception as e:
+                logger.error(f"Error deleting {video_file}: {e}")
+        
+        logger.info(f"Cleared {deleted_count} videos")
+        return {"success": True, "message": f"Deleted {deleted_count} videos"}
+        
+    except Exception as e:
+        logger.error(f"Error clearing videos: {e}")
+        return {"success": False, "error": str(e)}
 
 @app.post("/generate_video")
 async def generate_video(
