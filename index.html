@@ -237,6 +237,15 @@
                                     <option value="3840x2160">3840x2160 (4K)</option>
                                 </select>
                             </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-2 text-slate-300">Voice</label>
+                                <select id="voice" 
+                                        class="w-full px-3 py-3 modern-input rounded-xl focus:outline-none text-white">
+                                    <option value="female">Female</option>
+                                    <option value="male">Male</option>
+                                    <option value="neutral">Neutral</option>
+                                </select>
+                            </div>
                         </div>
                         <div>
                             <label class="block text-sm font-medium mb-2 text-slate-300">Transition Duration</label>
@@ -362,6 +371,33 @@
                 slider.addEventListener('input', function() {
                     display.textContent = this.value + 's';
                 });
+            }
+            
+            // Load available voices
+            loadAvailableVoices();
+        }
+
+        async function loadAvailableVoices() {
+            try {
+                const response = await fetch('/api/voices/list');
+                const data = await response.json();
+                
+                const voiceSelect = document.getElementById('voice');
+                if (voiceSelect && data.voices) {
+                    // Clear existing options
+                    voiceSelect.innerHTML = '';
+                    
+                    // Add available voices
+                    data.voices.forEach(voice => {
+                        const option = document.createElement('option');
+                        option.value = voice;
+                        option.textContent = voice.charAt(0).toUpperCase() + voice.slice(1);
+                        voiceSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading voices:', error);
+                // Keep default options if API fails
             }
         }
 
@@ -563,6 +599,7 @@
             const outputName = document.getElementById('outputName').value.trim() || 'generated-video.mp4';
             const resolution = document.getElementById('resolution').value;
             const transitionDuration = document.getElementById('transitionDuration').value;
+            const voice = document.getElementById('voice').value;
 
             if (paragraphs.length === 0) {
                 showToast('Error', 'Please enter some content for the video', 'error');
@@ -574,6 +611,7 @@
             formData.append('output_name', outputName);
             formData.append('resolution', resolution);
             formData.append('transition_duration', transitionDuration);
+            formData.append('voice', voice);
 
             const generateBtn = document.getElementById('generateBtn');
             if (generateBtn) {

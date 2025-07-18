@@ -57,11 +57,11 @@ from pydantic import BaseModel
 
 # TTS Integration
 try:
-    import kokoro_onnx
-    KOKORO_AVAILABLE = True
+    from indextts.infer import IndexTTS
+    INDEX_TTS_AVAILABLE = True
 except ImportError:
-    KOKORO_AVAILABLE = False
-    print("Warning: Kokoro TTS not available. Install with: pip install kokoro-onnx")
+    INDEX_TTS_AVAILABLE = False
+    print("Warning: Index-TTS not available. Install with: pip install git+https://github.com/index-tts/index-tts.git")
 
 # Audio processing
 import soundfile as sf
@@ -144,7 +144,7 @@ class GeminiClient:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = "https://openrouter.ai/api/v1"
-        self.model = "google/gemini-2.0-flash-exp:free"
+        self.model = "google/gemini-2.5-flash"
     
     async def generate_content(self, prompt: str, system_prompt: str = None) -> str:
         """Generate content using Gemini via OpenRouter"""
@@ -289,31 +289,62 @@ class AdvancedScreenshotManager:
 # ---------------------------------------------------------------------------
 class TTSManager:
     def __init__(self):
-        self.kokoro_model = None
+        self.index_tts_model = None
         self.available_voices = []
         self.initialize_tts()
     
     def initialize_tts(self):
         """Initialize TTS engines"""
-        if KOKORO_AVAILABLE:
+        if INDEX_TTS_AVAILABLE:
             try:
-                # Initialize Kokoro TTS
-                self.kokoro_model = kokoro_onnx.Kokoro()
-                self.available_voices = ["female", "male", "neutral"]
-                logger.info("Kokoro TTS initialized successfully")
+                # Initialize Index-TTS
+                self.index_tts_model = IndexTTS(
+                    model_dir="checkpoints", 
+                    cfg_path="checkpoints/config.yaml"
+                )
+                self.available_voices = self.get_available_voices()
+                logger.info(f"Index-TTS initialized successfully with voices: {self.available_voices}")
             except Exception as e:
-                logger.error(f"Failed to initialize Kokoro TTS: {e}")
-                self.kokoro_model = None
+                logger.error(f"Failed to initialize Index-TTS: {e}")
+                self.index_tts_model = None
+                self.available_voices = ["female", "male", "neutral"]  # Fallback voices
         else:
-            logger.warning("Kokoro TTS not available")
+            logger.warning("Index-TTS not available")
+            self.available_voices = ["female", "male", "neutral"]  # Fallback voices
+    
+    def get_available_voices(self):
+        """Get list of available voices from checkpoints directory"""
+        try:
+            import os
+            from pathlib import Path
+            
+            checkpoints_dir = Path("checkpoints")
+            if not checkpoints_dir.exists():
+                return ["female", "male", "neutral"]
+            
+            # Look for voice files or directories
+            voices = []
+            for item in checkpoints_dir.iterdir():
+                if item.is_dir() and any(keyword in item.name.lower() for keyword in ['voice', 'speaker']):
+                    voices.append(item.name)
+                elif item.is_file() and item.suffix in ['.pt', '.pth', '.ckpt'] and 'voice' in item.name.lower():
+                    voices.append(item.stem)
+            
+            # If no voices found, return default ones
+            if not voices:
+                voices = ["female", "male", "neutral"]
+            
+            return voices
+        except Exception as e:
+            logger.warning(f"Error getting available voices: {e}")
+            return ["female", "male", "neutral"]
     
     def generate_speech(self, text: str, output_file: str, voice: str = "female") -> bool:
         """Generate speech from text"""
         try:
-            if self.kokoro_model and voice in self.available_voices:
-                # Use Kokoro TTS
-                audio_data = self.kokoro_model.generate(text, voice=voice)
-                sf.write(output_file, audio_data, 24000)
+            if self.index_tts_model and voice in self.available_voices:
+                # Use Index-TTS
+                self.index_tts_model.infer(voice, text, output_file)
                 logger.info(f"Speech generated: {output_file}")
                 return True
             else:
@@ -477,7 +508,8 @@ class AutoModeManager:
                 links=links,
                 output_name=output_name,
                 resolution="1920x1080",
-                transition_duration=2.0
+                transition_duration=2.0,
+                voice="female"  # Default voice for auto generation
             )
             
             if success:
@@ -548,7 +580,8 @@ class EnhancedVideoGenerator:
     async def create_video(self, paragraphs: List[str], links: List[str],
                           output_name: str = "generated_video.mp4",
                           resolution: str = "1920x1080", 
-                          transition_duration: float = 2.0) -> bool:
+                          transition_duration: float = 2.0,
+                          voice: str = "female") -> bool:
         """Create video from paragraphs and links"""
         temp_dir = None
         try:
@@ -571,7 +604,7 @@ class EnhancedVideoGenerator:
                 
                 # Generate TTS audio
                 audio_file = os.path.join(temp_dir, f"audio_{i}.wav")
-                if self.tts_manager.generate_speech(paragraph, audio_file):
+                if self.tts_manager.generate_speech(paragraph, audio_file, voice):
                     audio_files.append(audio_file)
                 else:
                     logger.warning(f"Failed to generate audio for segment {i}")
@@ -882,6 +915,21 @@ async def get_auto_mode_status():
         "interval_hours": app_config.auto_mode_interval // 3600
     }
 
+@app.get("/api/voices/list")
+async def list_voices():
+    """Get list of available TTS voices"""
+    try:
+        if hasattr(gleam_video, 'tts_manager') and gleam_video.tts_manager:
+            voices = gleam_video.tts_manager.available_voices
+        else:
+            voices = ["female", "male", "neutral"]  # Default fallback
+        
+        return {"voices": voices}
+        
+    except Exception as e:
+        logger.error(f"Error getting voices: {e}")
+        return {"voices": ["female", "male", "neutral"]}
+
 @app.get("/api/videos/list")
 async def list_videos():
     """List generated videos"""
@@ -930,7 +978,8 @@ async def generate_video(
     links: List[str] = Form(default=[]),
     output_name: str = Form(default="generated-video.mp4"),
     resolution: str = Form(default="1920x1080"),
-    transition_duration: float = Form(default=2.0)
+    transition_duration: float = Form(default=2.0),
+    voice: str = Form(default="female")
 ):
     """Generate video from form data"""
     try:
@@ -952,7 +1001,8 @@ async def generate_video(
             links=links,
             output_name=output_name,
             resolution=resolution,
-            transition_duration=transition_duration
+            transition_duration=transition_duration,
+            voice=voice
         ))
         
         return {"success": True, "message": "Video generation started"}
