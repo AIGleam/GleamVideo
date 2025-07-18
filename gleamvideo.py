@@ -180,401 +180,6 @@ progress_data = {
 }
 
 # ---------------------------------------------------------------------------
-# Helper Functions for Enhanced Features
-# ---------------------------------------------------------------------------
-async def generate_specific_reddit_reaction(reddit_url: str, video_length: int, voice: str):
-    """Generate a reaction video for a specific Reddit post"""
-    try:
-        update_progress("working", "Fetching Reddit content...", 10, "Reddit Fetch")
-        
-        # Fetch the specific Reddit post
-        content = await auto_mode_manager.fetch_specific_reddit_post(reddit_url)
-        
-        if not content:
-            update_progress("error", "Failed to fetch Reddit content", 0, "Error")
-            return
-        
-        update_progress("working", "Generating reaction script...", 30, "AI Processing")
-        
-        # Generate reaction
-        ai_client = GeminiClient(app_config.openrouter_api_key)
-        script = await ai_client.generate_reddit_reaction(content, video_length)
-        segments = await ai_client.generate_timed_content(script, video_length)
-        
-        update_progress("working", "Creating video...", 60, "Video Generation")
-        
-        # Create video
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        subreddit = content.get('subreddit', 'reddit')
-        output_name = f"reaction_{subreddit}_{timestamp}.mp4"
-        
-        video_generator = EnhancedVideoGenerator()
-        success = await video_generator.create_video(
-            paragraphs=segments,
-            links=[content.get('link', '')],
-            output_name=output_name,
-            resolution="1920x1080",
-            transition_duration=2.0,
-            voice=voice,
-            target_duration=video_length
-        )
-        
-        if success:
-            update_progress("done", f"Reaction video created: {output_name}", 100, "Complete")
-        else:
-            update_progress("error", "Video generation failed", 0, "Error")
-            
-    except Exception as e:
-        logger.error(f"Error in specific Reddit reaction generation: {e}")
-        update_progress("error", f"Generation failed: {str(e)}", 0, "Error")
-
-# Application instances
-app = FastAPI(
-    title="GleamVideo Enhanced",
-    description="AI-Powered Video Generation Platform",
-    version="2.0.0"
-)
-
-# Initialize global instances
-auto_mode_manager = AutoModeManager()
-video_generator = EnhancedVideoGenerator()
-
-# Configure middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-
-# Mount static files
-app.mount("/videos", StaticFiles(directory="videos"), name="videos")
-
-def update_progress(status: str, message: str, pct: float, current_task: str = ""):
-    """Update global progress state"""
-    global progress_data
-    progress_data.update({
-        "status": status,
-        "message": message,
-        "pct": max(0, min(100, pct)),
-        "current_task": current_task
-    })
-    logger.info(f"Progress: {pct:.1f}% - {message}")
-
-# ---------------------------------------------------------------------------
-# AI Integration with Gemini
-# ---------------------------------------------------------------------------
-class GeminiClient:
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        self.base_url = "https://openrouter.ai/api/v1"
-        self.model = "google/gemini-2.5-flash"
-    
-    async def generate_content(self, prompt: str, system_prompt: str = None) -> str:
-        """Generate content using Gemini via OpenRouter"""
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://gleamvideo.com",
-            "X-Title": "GleamVideo Enhanced"
-        }
-        
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-        
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": 0.7,
-            "max_tokens": 4000
-        }
-        
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=headers,
-                    json=payload
-                ) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        return data["choices"][0]["message"]["content"]
-                    else:
-                        error_text = await response.text()
-                        logger.error(f"OpenRouter API error: {response.status} - {error_text}")
-                        raise Exception(f"API Error: {response.status}")
-        except Exception as e:
-            logger.error(f"Error calling Gemini API: {e}")
-            raise
-    
-    async def generate_reddit_reaction(self, reddit_content: Dict, target_length: int = 180) -> str:
-        """Generate a reaction/commentary video script for Reddit content"""
-        
-        # Enhanced system prompts based on personality
-        personality_prompts = {
-            "sarcastic_reviewer": """You are a sarcastic, witty content reviewer who reacts to Reddit posts. 
-            You're not afraid to be a bit vulgar (but not overly offensive) and use humor to engage viewers.
-            You point out absurdities, make clever observations, and aren't afraid to call out bullshit when you see it.
-            Keep your reactions authentic and entertaining. Use natural speech patterns that work well with text-to-speech.
-            Avoid hard-to-pronounce words and use contractions that sound natural when spoken.""",
-            
-            "enthusiastic_commentator": """You are an enthusiastic, energetic commentator who gets excited about Reddit content.
-            You're funny, a bit edgy, and love to share your genuine reactions. You use casual language and aren't afraid
-            to be a bit crude when it fits. Your goal is to entertain while providing actual commentary on the content.""",
-            
-            "analytical_roaster": """You are someone who deeply analyzes Reddit content but with a humorous, roasting twist.
-            You're intelligent but not pretentious, funny but not trying too hard. You call out logical fallacies,
-            point out contradictions, and aren't afraid to use colorful language when the situation calls for it."""
-        }
-        
-        system_prompt = personality_prompts.get(app_config.reaction_personality, personality_prompts["sarcastic_reviewer"])
-        
-        # Calculate target word count (roughly 150-180 words per minute of speech)
-        target_words = (target_length // 60) * 165
-        
-        content_prompt = f"""
-        React to this Reddit post from r/{app_config.target_subreddit}:
-        
-        Title: {reddit_content.get('title', 'No title')}
-        Content: {reddit_content.get('content', reddit_content.get('summary', 'No content'))}
-        
-        Create a {target_length}-second reaction video script (approximately {target_words} words).
-        
-        Your reaction should:
-        1. Actually READ and respond to the specific content (don't just summarize)
-        2. Include your genuine thoughts and opinions
-        3. Be entertaining and engaging
-        4. Use natural speech that sounds good with text-to-speech
-        5. Include some humor and personality
-        6. Feel like a real person reacting, not a robot reading
-        7. Point out interesting details or issues with the content
-        8. Be conversational and authentic
-        
-        Avoid:
-        - Just reading the content back
-        - Being overly polite or corporate
-        - Using complex words that are hard to pronounce
-        - Generic reactions that could apply to any post
-        
-        Write this as a natural monologue, like you're talking to a friend about what you just read.
-        """
-        
-        return await self.generate_content(content_prompt, system_prompt)
-    
-    async def generate_timed_content(self, content: str, target_duration: int) -> List[str]:
-        """Break content into time-appropriate segments"""
-        
-        # Estimate words per minute for speech (average 150-180 WPM)
-        words_per_minute = 165
-        target_words = (target_duration // 60) * words_per_minute
-        
-        # If content is too short, expand it
-        if len(content.split()) < target_words * 0.8:
-            expansion_prompt = f"""
-            Take this content and expand it to approximately {target_words} words while maintaining 
-            the same tone and style. Add more details, examples, and natural commentary:
-            
-            {content}
-            
-            Make sure the expansion feels natural and doesn't just add filler words.
-            """
-            content = await self.generate_content(expansion_prompt)
-        
-        # Break into segments of roughly 30-45 seconds each
-        words = content.split()
-        segment_size = words_per_minute // 2  # ~30 seconds worth of words
-        
-        segments = []
-        for i in range(0, len(words), segment_size):
-            segment = " ".join(words[i:i + segment_size])
-            if segment.strip():
-                segments.append(segment.strip())
-        
-        return segments
-
-# ---------------------------------------------------------------------------
-# Enhanced Screenshot System with Multiple Angles
-# ---------------------------------------------------------------------------
-class AdvancedScreenshotManager:
-    def __init__(self):
-        self.driver = None
-        self.driver_initialized = False
-        
-    def initialize_driver(self):
-        """Initialize Firefox WebDriver with optimal settings"""
-        if self.driver_initialized:
-            return
-            
-        try:
-            options = FirefoxOptions()
-            options.add_argument("--headless")
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--disable-gpu")
-            options.add_argument("--window-size=1920,1080")
-            options.add_argument("--disable-extensions")
-            options.add_argument("--disable-plugins")
-            
-            # Enhanced preferences for better screenshots
-            options.set_preference("general.useragent.override", 
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-            options.set_preference("dom.webnotifications.enabled", False)
-            options.set_preference("media.autoplay.default", 0)
-            
-            # Use webdriver-manager for automatic driver management
-            service = FirefoxService(GeckoDriverManager().install())
-            
-            self.driver = webdriver.Firefox(service=service, options=options)
-            self.driver_initialized = True
-            logger.info("Screenshot driver initialized successfully")
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize screenshot driver: {e}")
-            self.driver = None
-    
-    def capture_advanced_screenshot(self, url: str, filename: str) -> bool:
-        """Capture screenshot with enhanced techniques"""
-        try:
-            if not self.driver_initialized:
-                self.initialize_driver()
-            
-            if not self.driver:
-                logger.error("Driver not available for screenshot")
-                return False
-            
-            # Navigate and wait for load
-            self.driver.get(url)
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
-            
-            # Additional wait for dynamic content
-            time.sleep(3)
-            
-            # Execute JS to remove overlays and improve visibility
-            self.driver.execute_script("""
-                // Remove common overlay elements
-                document.querySelectorAll('[class*="overlay"], [class*="modal"], [class*="popup"]').forEach(el => el.remove());
-                document.querySelectorAll('[id*="overlay"], [id*="modal"], [id*="popup"]').forEach(el => el.remove());
-                
-                // Remove cookie banners
-                document.querySelectorAll('[class*="cookie"], [class*="gdpr"], [class*="consent"]').forEach(el => el.remove());
-                
-                // Scroll to top
-                window.scrollTo(0, 0);
-            """)
-            
-            time.sleep(1)
-            
-            # Take screenshot
-            screenshot_taken = self.driver.save_screenshot(filename)
-            
-            if screenshot_taken:
-                logger.info(f"Screenshot saved: {filename}")
-                return True
-            else:
-                logger.error("Failed to take screenshot")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Error capturing screenshot: {e}")
-            return False
-    
-    def cleanup(self):
-        """Clean up driver resources"""
-        if self.driver:
-            try:
-                self.driver.quit()
-                self.driver = None
-                self.driver_initialized = False
-                logger.info("Screenshot driver cleaned up")
-            except Exception as e:
-                logger.error(f"Error cleaning up driver: {e}")
-
-# ---------------------------------------------------------------------------
-# Enhanced TTS with Multiple Voices
-# ---------------------------------------------------------------------------
-class TTSManager:
-    def __init__(self):
-        self.index_tts_model = None
-        self.available_voices = []
-        self.initialize_tts()
-    
-    def initialize_tts(self):
-        """Initialize TTS engines"""
-        if INDEX_TTS_AVAILABLE:
-            try:
-                # Initialize Index-TTS
-                self.index_tts_model = IndexTTS(
-                    model_dir="checkpoints", 
-                    cfg_path="checkpoints/config.yaml"
-                )
-                self.available_voices = self.get_available_voices()
-                logger.info(f"Index-TTS initialized successfully with voices: {self.available_voices}")
-            except Exception as e:
-                logger.error(f"Failed to initialize Index-TTS: {e}")
-                self.index_tts_model = None
-                self.available_voices = ["female", "male", "neutral"]  # Fallback voices
-        else:
-            logger.warning("Index-TTS not available")
-            self.available_voices = ["female", "male", "neutral"]  # Fallback voices
-    
-    def get_available_voices(self):
-        """Get list of available voices from checkpoints directory"""
-        try:
-            import os
-            from pathlib import Path
-            
-            checkpoints_dir = Path("checkpoints")
-            if not checkpoints_dir.exists():
-                return ["female", "male", "neutral"]
-            
-            # Look for voice files or directories
-            voices = []
-            for item in checkpoints_dir.iterdir():
-                if item.is_dir() and any(keyword in item.name.lower() for keyword in ['voice', 'speaker']):
-                    voices.append(item.name)
-                elif item.is_file() and item.suffix in ['.pt', '.pth', '.ckpt'] and 'voice' in item.name.lower():
-                    voices.append(item.stem)
-            
-            # If no voices found, return default ones
-            if not voices:
-                voices = ["female", "male", "neutral"]
-            
-            return voices
-        except Exception as e:
-            logger.warning(f"Error getting available voices: {e}")
-            return ["female", "male", "neutral"]
-    
-    def generate_speech(self, text: str, output_file: str, voice: str = "female") -> bool:
-        """Generate speech from text with enhanced formatting"""
-        try:
-            # Format text for better TTS output
-            formatted_text = TTSTextFormatter.format_for_tts(text)
-            
-            if self.index_tts_model and voice in self.available_voices:
-                # Use Index-TTS with formatted text
-                self.index_tts_model.infer(voice, formatted_text, output_file)
-                logger.info(f"Speech generated: {output_file}")
-                return True
-            else:
-                # Fallback to system TTS or silence
-                logger.warning("TTS not available, generating silence")
-                # Estimate duration based on word count (average 165 WPM)
-                word_count = len(formatted_text.split())
-                duration = (word_count / 165) * 60  # More accurate duration estimate
-                silence = np.zeros(int(24000 * duration))
-                sf.write(output_file, silence, 24000)
-                return True
-        except Exception as e:
-            logger.error(f"Error generating speech: {e}")
-            return False
-
-# ---------------------------------------------------------------------------
 # Enhanced Auto Mode Manager
 # ---------------------------------------------------------------------------
 class AutoModeManager:
@@ -803,6 +408,247 @@ class AutoModeManager:
             logger.error(f"Error generating auto video: {e}")
 
 # ---------------------------------------------------------------------------
+# Helper Functions for Enhanced Features
+# ---------------------------------------------------------------------------
+async def generate_specific_reddit_reaction(reddit_url: str, video_length: int, voice: str):
+    """Generate a reaction video for a specific Reddit post"""
+    try:
+        update_progress("working", "Fetching Reddit content...", 10, "Reddit Fetch")
+        
+        # Fetch the specific Reddit post
+        content = await auto_mode_manager.fetch_specific_reddit_post(reddit_url)
+        
+        if not content:
+            update_progress("error", "Failed to fetch Reddit content", 0, "Error")
+            return
+        
+        update_progress("working", "Generating reaction script...", 30, "AI Processing")
+        
+        # Generate reaction
+        ai_client = GeminiClient(app_config.openrouter_api_key)
+        script = await ai_client.generate_reddit_reaction(content, video_length)
+        segments = await ai_client.generate_timed_content(script, video_length)
+        
+        update_progress("working", "Creating video...", 60, "Video Generation")
+        
+        # Create video
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        subreddit = content.get('subreddit', 'reddit')
+        output_name = f"reaction_{subreddit}_{timestamp}.mp4"
+        
+        video_generator = EnhancedVideoGenerator()
+        success = await video_generator.create_video(
+            paragraphs=segments,
+            links=[content.get('link', '')],
+            output_name=output_name,
+            resolution="1920x1080",
+            transition_duration=2.0,
+            voice=voice,
+            target_duration=video_length
+        )
+        
+        if success:
+            update_progress("done", f"Reaction video created: {output_name}", 100, "Complete")
+        else:
+            update_progress("error", "Video generation failed", 0, "Error")
+            
+    except Exception as e:
+        logger.error(f"Error in specific Reddit reaction generation: {e}")
+        update_progress("error", f"Generation failed: {str(e)}", 0, "Error")
+
+# ---------------------------------------------------------------------------
+# Enhanced TTS with Multiple Voices
+# ---------------------------------------------------------------------------
+class TTSManager:
+    def __init__(self):
+        self.index_tts_model = None
+        self.available_voices = []
+        self.initialize_tts()
+    
+    def initialize_tts(self):
+        """Initialize TTS engines"""
+        if INDEX_TTS_AVAILABLE:
+            try:
+                # Initialize Index-TTS
+                self.index_tts_model = IndexTTS(
+                    model_dir="checkpoints", 
+                    cfg_path="checkpoints/config.yaml"
+                )
+                self.available_voices = self.get_available_voices()
+                logger.info(f"Index-TTS initialized successfully with voices: {self.available_voices}")
+            except Exception as e:
+                logger.error(f"Failed to initialize Index-TTS: {e}")
+                self.index_tts_model = None
+                self.available_voices = ["female", "male", "neutral"]  # Fallback voices
+        else:
+            logger.warning("Index-TTS not available")
+            self.available_voices = ["female", "male", "neutral"]  # Fallback voices
+    
+    def get_available_voices(self):
+        """Get list of available voices from checkpoints directory"""
+        try:
+            import os
+            from pathlib import Path
+            
+            checkpoints_dir = Path("checkpoints")
+            if not checkpoints_dir.exists():
+                return ["female", "male", "neutral"]
+            
+            # Look for voice files or directories
+            voices = []
+            for item in checkpoints_dir.iterdir():
+                if item.is_dir() and any(keyword in item.name.lower() for keyword in ['voice', 'speaker']):
+                    voices.append(item.name)
+                elif item.is_file() and item.suffix in ['.pt', '.pth', '.ckpt'] and 'voice' in item.name.lower():
+                    voices.append(item.stem)
+            
+            # If no voices found, return default ones
+            if not voices:
+                voices = ["female", "male", "neutral"]
+            
+            return voices
+        except Exception as e:
+            logger.warning(f"Error getting available voices: {e}")
+            return ["female", "male", "neutral"]
+    
+    def generate_speech(self, text: str, output_file: str, voice: str = "female") -> bool:
+        """Generate speech from text with enhanced formatting"""
+        try:
+            # Format text for better TTS output
+            formatted_text = TTSTextFormatter.format_for_tts(text)
+            
+            if self.index_tts_model and voice in self.available_voices:
+                # Use Index-TTS with formatted text
+                self.index_tts_model.infer(voice, formatted_text, output_file)
+                logger.info(f"Speech generated: {output_file}")
+                return True
+            else:
+                # Fallback to system TTS or silence
+                logger.warning("TTS not available, generating silence")
+                # Estimate duration based on word count (average 165 WPM)
+                word_count = len(formatted_text.split())
+                duration = (word_count / 165) * 60  # More accurate duration estimate
+                silence = np.zeros(int(24000 * duration))
+                sf.write(output_file, silence, 24000)
+                return True
+        except Exception as e:
+            logger.error(f"Error generating speech: {e}")
+            return False
+
+# ---------------------------------------------------------------------------
+# Enhanced Screenshot System with Multiple Angles
+# ---------------------------------------------------------------------------
+class AdvancedScreenshotManager:
+    def __init__(self):
+        self.driver = None
+        self.driver_initialized = False
+        
+    def initialize_driver(self):
+        """Initialize Firefox WebDriver with optimal settings"""
+        if self.driver_initialized:
+            return
+            
+        try:
+            options = FirefoxOptions()
+            options.add_argument("--headless")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--window-size=1920,1080")
+            options.add_argument("--disable-extensions")
+            options.add_argument("--disable-plugins")
+            
+            # Enhanced preferences for better screenshots
+            options.set_preference("general.useragent.override", 
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            options.set_preference("dom.webnotifications.enabled", False)
+            options.set_preference("media.autoplay.default", 0)
+            
+            # Use webdriver-manager for automatic driver management
+            service = FirefoxService(GeckoDriverManager().install())
+            
+            self.driver = webdriver.Firefox(service=service, options=options)
+            self.driver_initialized = True
+            logger.info("Screenshot driver initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize screenshot driver: {e}")
+            self.driver = None
+    
+    def capture_advanced_screenshot(self, url: str, filename: str) -> bool:
+        """Capture screenshot with enhanced techniques"""
+        try:
+            if not self.driver_initialized:
+                self.initialize_driver()
+            
+            if not self.driver:
+                logger.error("Driver not available for screenshot")
+                return False
+            
+            # Navigate and wait for load
+            self.driver.get(url)
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
+            
+            # Additional wait for dynamic content
+            time.sleep(3)
+            
+            # Execute JS to remove overlays and improve visibility
+            self.driver.execute_script("""
+                // Remove common overlay elements
+                document.querySelectorAll('[class*="overlay"], [class*="modal"], [class*="popup"]').forEach(el => el.remove());
+                document.querySelectorAll('[id*="overlay"], [id*="modal"], [id*="popup"]').forEach(el => el.remove());
+                
+                // Remove cookie banners
+                document.querySelectorAll('[class*="cookie"], [class*="gdpr"], [class*="consent"]').forEach(el => el.remove());
+                
+                // Scroll to top
+                window.scrollTo(0, 0);
+            """)
+            
+            time.sleep(1)
+            
+            # Take screenshot
+            screenshot_taken = self.driver.save_screenshot(filename)
+            
+            if screenshot_taken:
+                logger.info(f"Screenshot saved: {filename}")
+                return True
+            else:
+                logger.error("Failed to take screenshot")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error capturing screenshot: {e}")
+            return False
+    
+    async def capture_screenshot(self, url: str, index: int) -> str:
+        """Capture screenshot and return file path"""
+        try:
+            screenshot_file = f"screenshots/screenshot_{index}.png"
+            Path("screenshots").mkdir(exist_ok=True)
+            
+            if self.capture_advanced_screenshot(url, screenshot_file):
+                return screenshot_file
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error in capture_screenshot: {e}")
+            return None
+    
+    def cleanup(self):
+        """Clean up driver resources"""
+        if self.driver:
+            try:
+                self.driver.quit()
+                self.driver = None
+                self.driver_initialized = False
+                logger.info("Screenshot driver cleaned up")
+            except Exception as e:
+                logger.error(f"Error cleaning up driver: {e}")
+
+# ---------------------------------------------------------------------------
 # Enhanced Video Generation with Ken Burns Effect
 # ---------------------------------------------------------------------------
 class EnhancedVideoGenerator:
@@ -848,255 +694,525 @@ class EnhancedVideoGenerator:
                 # Apply transformation
                 transformed = cv2.warpAffine(img, M, (width, height))
                 
-                # Write frame
                 out.write(transformed)
             
             out.release()
-            logger.info(f"Ken Burns effect applied: {output_path}")
             return True
             
         except Exception as e:
             logger.error(f"Error applying Ken Burns effect: {e}")
             return False
     
-    async def create_video(self, paragraphs: List[str], links: List[str],
-                          output_name: str = "generated_video.mp4",
-                          resolution: str = "1920x1080", 
-                          transition_duration: float = 2.0,
-                          voice: str = "female",
-                          target_duration: int = None) -> bool:
-        """Create video from paragraphs and links"""
-        temp_dir = None
+    async def create_video(self, paragraphs: List[str], links: List[str], output_name: str = None, 
+                          resolution: str = "1920x1080", transition_duration: float = 2.0, 
+                          voice: str = "female", target_duration: int = None) -> bool:
+        """Enhanced video creation with Ken Burns effects and better timing"""
         try:
-            # Parse resolution
-            width, height = map(int, resolution.split('x'))
+            if not output_name:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                output_name = f"enhanced_video_{timestamp}.mp4"
             
-            # Create temporary directory
-            temp_dir = tempfile.mkdtemp(prefix="gleamvideo_")
-            logger.info(f"Working in temp directory: {temp_dir}")
+            output_path = Path("videos") / output_name
+            output_path.parent.mkdir(exist_ok=True)
             
-            update_progress("working", "Generating audio and video segments...", 20, "Processing Content")
+            if not paragraphs:
+                logger.error("No content provided for video creation")
+                return False
             
-            video_clips = []
-            audio_files = []
+            update_progress("working", "Setting up video generation...", 5, "Initialization")
             
-            # Process each paragraph
-            for i, paragraph in enumerate(paragraphs):
-                progress = 20 + (i / len(paragraphs)) * 60
-                update_progress("working", f"Processing segment {i+1}/{len(paragraphs)}", progress, f"Segment {i+1}")
+            # Calculate video timing
+            total_words = sum(len(p.split()) for p in paragraphs)
+            words_per_minute = 150  # Average speaking rate
+            estimated_audio_duration = (total_words / words_per_minute) * 60
+            
+            if target_duration:
+                # Adjust paragraphs to fit target duration if specified
+                target_audio_duration = max(30, min(target_duration - 10, estimated_audio_duration))
+                paragraphs = await self.adjust_content_for_duration(paragraphs, target_audio_duration)
+            else:
+                target_audio_duration = estimated_audio_duration
+            
+            # Take screenshots
+            update_progress("working", "Capturing screenshots...", 15, "Screenshots")
+            screenshots = []
+            
+            for i, link in enumerate(links[:len(paragraphs)]):
+                if link.strip():
+                    screenshot_path = await self.screenshot_manager.capture_screenshot(link, i)
+                    if screenshot_path:
+                        screenshots.append(screenshot_path)
+                    else:
+                        logger.warning(f"Failed to capture screenshot for: {link}")
                 
-                # Generate TTS audio
-                audio_file = os.path.join(temp_dir, f"audio_{i}.wav")
+                progress = 15 + (i + 1) * 25 / len(links)
+                update_progress("working", f"Screenshot {i+1}/{len(links)}", progress, "Screenshots")
+            
+            # Generate audio segments
+            update_progress("working", "Generating audio...", 45, "TTS Generation")
+            audio_segments = []
+            segment_durations = []
+            
+            for i, paragraph in enumerate(paragraphs):
+                audio_file = f"temp_audio_{i}.wav"
+                
                 if self.tts_manager.generate_speech(paragraph, audio_file, voice):
-                    audio_files.append(audio_file)
+                    # Get actual audio duration
+                    try:
+                        import soundfile as sf
+                        data, samplerate = sf.read(audio_file)
+                        duration = len(data) / samplerate
+                        segment_durations.append(duration)
+                        audio_segments.append(audio_file)
+                    except:
+                        # Fallback duration estimation
+                        word_count = len(paragraph.split())
+                        duration = max(3.0, word_count / 2.5)
+                        segment_durations.append(duration)
+                        audio_segments.append(audio_file)
                 else:
                     logger.warning(f"Failed to generate audio for segment {i}")
-                    continue
+                    duration = max(3.0, len(paragraph.split()) / 2.5)
+                    segment_durations.append(duration)
+                    audio_segments.append(None)
                 
-                # Create video clip
-                clip_path = os.path.join(temp_dir, f"clip_{i}.mp4")
-                
-                # Try to get screenshot if URL provided
-                if i < len(links) and links[i].strip():
-                    screenshot_path = os.path.join(temp_dir, f"screenshot_{i}.png")
-                    if self.screenshot_manager.capture_advanced_screenshot(links[i], screenshot_path):
-                        # Apply Ken Burns effect
-                        ken_burns_path = os.path.join(temp_dir, f"kenburns_{i}.mp4")
-                        if self.apply_ken_burns_effect(screenshot_path, ken_burns_path, transition_duration + 2):
-                            video_clips.append(ken_burns_path)
-                        else:
-                            # Fallback to static image
-                            self.create_static_clip(screenshot_path, clip_path, transition_duration + 2, width, height)
-                            video_clips.append(clip_path)
+                progress = 45 + (i + 1) * 25 / len(paragraphs)
+                update_progress("working", f"Audio segment {i+1}/{len(paragraphs)}", progress, "TTS Generation")
+            
+            # Create video segments with Ken Burns effect
+            update_progress("working", "Creating video segments...", 70, "Video Processing")
+            video_segments = []
+            
+            for i, (screenshot, duration) in enumerate(zip(screenshots, segment_durations)):
+                if screenshot and Path(screenshot).exists():
+                    # Create Ken Burns effect for this segment
+                    ken_burns_output = f"temp_ken_burns_{i}.mp4"
+                    
+                    if self.apply_ken_burns_effect(screenshot, ken_burns_output, duration):
+                        video_segments.append(ken_burns_output)
                     else:
-                        # Create text-only clip
-                        self.create_text_clip(paragraph, clip_path, transition_duration + 2, width, height)
-                        video_clips.append(clip_path)
+                        # Fallback: create static video
+                        static_output = f"temp_static_{i}.mp4"
+                        if self.create_static_video(screenshot, static_output, duration):
+                            video_segments.append(static_output)
+                        else:
+                            video_segments.append(None)
                 else:
-                    # Create text-only clip
-                    self.create_text_clip(paragraph, clip_path, transition_duration + 2, width, height)
-                    video_clips.append(clip_path)
+                    # Create placeholder video
+                    placeholder_output = f"temp_placeholder_{i}.mp4"
+                    if self.create_placeholder_video(placeholder_output, duration, paragraphs[i][:100]):
+                        video_segments.append(placeholder_output)
+                    else:
+                        video_segments.append(None)
+                
+                progress = 70 + (i + 1) * 15 / len(screenshots)
+                update_progress("working", f"Video segment {i+1}/{len(screenshots)}", progress, "Video Processing")
             
-            if not video_clips:
-                logger.error("No video clips were created")
-                return False
-            
+            # Combine video and audio
             update_progress("working", "Combining video and audio...", 85, "Final Assembly")
             
-            # Combine all clips
-            final_output = os.path.join("videos", output_name)
-            success = await self.combine_clips_with_audio(video_clips, audio_files, final_output, temp_dir)
+            success = await self.combine_video_audio_segments(
+                video_segments, audio_segments, str(output_path), resolution, transition_duration
+            )
+            
+            # Cleanup temporary files
+            self.cleanup_temp_files(audio_segments + video_segments)
             
             if success:
-                update_progress("done", f"Video created successfully: {output_name}", 100, "Complete")
-                logger.info(f"Video generation completed: {final_output}")
+                update_progress("done", f"Video created: {output_name}", 100, "Complete")
+                logger.info(f"Enhanced video created successfully: {output_path}")
                 return True
             else:
-                update_progress("error", "Failed to combine video segments", 0, "Error")
+                update_progress("error", "Video creation failed", 0, "Error")
                 return False
                 
         except Exception as e:
-            logger.error(f"Error in video creation: {e}")
+            logger.error(f"Error in enhanced video creation: {e}")
             update_progress("error", f"Video creation failed: {str(e)}", 0, "Error")
             return False
-        finally:
-            # Cleanup
-            if temp_dir and os.path.exists(temp_dir):
-                try:
-                    shutil.rmtree(temp_dir)
-                    logger.info(f"Cleaned up temp directory: {temp_dir}")
-                except Exception as e:
-                    logger.error(f"Cleanup error: {e}")
     
-    def create_text_clip(self, text: str, output_path: str, duration: float, width: int, height: int):
-        """Create a video clip with animated text"""
+    async def adjust_content_for_duration(self, paragraphs: List[str], target_duration: int) -> List[str]:
+        """Adjust content to fit target duration"""
         try:
-            # Create image with text
-            img = Image.new('RGB', (width, height), color='#1a1a2e')
-            draw = ImageDraw.Draw(img)
+            current_words = sum(len(p.split()) for p in paragraphs)
+            words_per_minute = 150
+            current_duration = (current_words / words_per_minute) * 60
             
-            # Try to use a system font
-            try:
-                font_path = get_system_font_path()
-                font = ImageFont.truetype(font_path, 48)
-            except Exception as e:
-                logger.warning(f"Could not load system font: {e}")
-                font = ImageFont.load_default()
+            if abs(current_duration - target_duration) < 10:  # Within 10 seconds
+                return paragraphs
             
-            # Calculate text position
-            text_bbox = draw.textbbox((0, 0), text, font=font)
-            text_width = text_bbox[2] - text_bbox[0]
-            text_height = text_bbox[3] - text_bbox[1]
+            target_words = int((target_duration * words_per_minute) / 60)
             
-            x = (width - text_width) // 2
-            y = (height - text_height) // 2
-            
-            # Draw text with outline
-            for dx in [-2, -1, 0, 1, 2]:
-                for dy in [-2, -1, 0, 1, 2]:
-                    if dx != 0 or dy != 0:
-                        draw.text((x + dx, y + dy), text, font=font, fill='black')
-            
-            draw.text((x, y), text, font=font, fill='white')
-            
-            # Save as temporary image
-            temp_img_path = output_path.replace('.mp4', '.png')
-            img.save(temp_img_path)
-            
-            # Convert to video using ffmpeg
-            cmd = [
-                'ffmpeg', '-y', '-loop', '1', '-i', temp_img_path,
-                '-c:v', 'libx264', '-t', str(duration), '-pix_fmt', 'yuv420p',
-                '-vf', f'scale={width}:{height}', output_path
-            ]
-            
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode == 0:
-                logger.info(f"Text clip created: {output_path}")
-                # Clean up temp image
-                try:
-                    os.remove(temp_img_path)
-                except:
-                    pass
+            if current_words > target_words:
+                # Trim content
+                adjusted_paragraphs = []
+                words_used = 0
+                
+                for paragraph in paragraphs:
+                    words_in_paragraph = len(paragraph.split())
+                    if words_used + words_in_paragraph <= target_words:
+                        adjusted_paragraphs.append(paragraph)
+                        words_used += words_in_paragraph
+                    else:
+                        # Trim the last paragraph to fit
+                        remaining_words = target_words - words_used
+                        if remaining_words > 10:  # Only add if substantial
+                            words = paragraph.split()[:remaining_words]
+                            adjusted_paragraphs.append(' '.join(words))
+                        break
+                
+                return adjusted_paragraphs
             else:
-                logger.error(f"FFmpeg text clip error: {result.stderr}")
+                # Content is already shorter than target, return as-is
+                return paragraphs
                 
         except Exception as e:
-            logger.error(f"Error creating text clip: {e}")
+            logger.error(f"Error adjusting content duration: {e}")
+            return paragraphs
     
-    def create_static_clip(self, image_path: str, output_path: str, duration: float, width: int, height: int):
-        """Create a static video clip from an image"""
+    def create_static_video(self, image_path: str, output_path: str, duration: float) -> bool:
+        """Create a static video from an image"""
         try:
-            cmd = [
-                'ffmpeg', '-y', '-loop', '1', '-i', image_path,
-                '-c:v', 'libx264', '-t', str(duration), '-pix_fmt', 'yuv420p',
-                '-vf', f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2',
-                output_path
-            ]
-            
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode == 0:
-                logger.info(f"Static clip created: {output_path}")
-            else:
-                logger.error(f"FFmpeg static clip error: {result.stderr}")
-                
-        except Exception as e:
-            logger.error(f"Error creating static clip: {e}")
-    
-    async def combine_clips_with_audio(self, video_clips: List[str], audio_files: List[str],
-                                      output_path: str, temp_dir: str) -> bool:
-        """Combine video clips with audio using FFmpeg"""
-        try:
-            # Create file list for FFmpeg concat
-            file_list_path = os.path.join(temp_dir, "file_list.txt")
-            with open(file_list_path, 'w') as f:
-                for clip in video_clips:
-                    # Use forward slashes for FFmpeg on all platforms
-                    clip_path = clip.replace('\\', '/')
-                    f.write(f"file '{clip_path}'\n")
-            
-            # Combine video clips
-            combined_video = os.path.join(temp_dir, "combined_video.mp4")
-            cmd = [
-                'ffmpeg', '-f', 'concat', '-safe', '0', '-i', file_list_path,
-                '-c', 'copy', combined_video, '-y'
-            ]
-            
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode != 0:
-                logger.error(f"FFmpeg video combine error: {result.stderr}")
+            img = cv2.imread(image_path)
+            if img is None:
                 return False
             
-            # If we have audio files, combine them and add to video
-            if audio_files:
-                # Create audio file list
-                audio_list_path = os.path.join(temp_dir, "audio_list.txt")
-                with open(audio_list_path, 'w') as f:
-                    for audio in audio_files:
-                        # Use forward slashes for FFmpeg on all platforms
-                        audio_path = audio.replace('\\', '/')
-                        f.write(f"file '{audio_path}'\n")
-                
-                # Combine audio files
-                combined_audio = os.path.join(temp_dir, "combined_audio.wav")
-                cmd = [
-                    'ffmpeg', '-f', 'concat', '-safe', '0', '-i', audio_list_path,
-                    '-c', 'copy', combined_audio, '-y'
-                ]
-                
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                if result.returncode != 0:
-                    logger.error(f"FFmpeg audio combine error: {result.stderr}")
-                    # Continue without audio
-                    final_output = os.path.join(temp_dir, output_path)
-                    shutil.copy2(combined_video, ensure_cross_platform_path(output_path))
-                    return True
-                
-                # Combine video and audio
-                cmd = [
-                    'ffmpeg', '-i', combined_video, '-i', combined_audio,
-                    '-c:v', 'copy', '-c:a', 'aac', '-shortest',
-                    ensure_cross_platform_path(output_path), '-y'
-                ]
-                
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                if result.returncode != 0:
-                    logger.error(f"FFmpeg final combine error: {result.stderr}")
-                    return False
-            else:
-                # No audio, just copy video
-                final_output = os.path.join(temp_dir, output_path)
-                shutil.copy2(combined_video, ensure_cross_platform_path(output_path))
+            height, width = img.shape[:2]
+            fps = 30
+            total_frames = int(duration * fps)
             
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+            
+            for _ in range(total_frames):
+                out.write(img)
+            
+            out.release()
             return True
             
         except Exception as e:
-            logger.error(f"Error combining clips: {e}")
+            logger.error(f"Error creating static video: {e}")
             return False
+    
+    def create_placeholder_video(self, output_path: str, duration: float, text: str = "") -> bool:
+        """Create a placeholder video with text"""
+        try:
+            width, height = 1920, 1080
+            fps = 30
+            total_frames = int(duration * fps)
+            
+            # Create a simple gradient background
+            background = np.zeros((height, width, 3), dtype=np.uint8)
+            background[:, :] = [40, 40, 60]  # Dark blue-gray
+            
+            # Add text if provided
+            if text:
+                from PIL import Image, ImageDraw, ImageFont
+                
+                # Convert to PIL for text rendering
+                pil_image = Image.fromarray(cv2.cvtColor(background, cv2.COLOR_BGR2RGB))
+                draw = ImageDraw.Draw(pil_image)
+                
+                try:
+                    font_path = get_system_font_path()
+                    font = ImageFont.truetype(font_path, 48)
+                except:
+                    font = ImageFont.load_default()
+                
+                # Wrap text
+                words = text.split()
+                lines = []
+                current_line = []
+                
+                for word in words:
+                    current_line.append(word)
+                    line_text = ' '.join(current_line)
+                    
+                    bbox = draw.textbbox((0, 0), line_text, font=font)
+                    line_width = bbox[2] - bbox[0]
+                    
+                    if line_width > width - 200:  # Leave margin
+                        if len(current_line) > 1:
+                            current_line.pop()
+                            lines.append(' '.join(current_line))
+                            current_line = [word]
+                        else:
+                            lines.append(line_text)
+                            current_line = []
+                
+                if current_line:
+                    lines.append(' '.join(current_line))
+                
+                # Draw text lines
+                y_offset = height // 2 - (len(lines) * 60) // 2
+                for line in lines:
+                    bbox = draw.textbbox((0, 0), line, font=font)
+                    line_width = bbox[2] - bbox[0]
+                    x = (width - line_width) // 2
+                    
+                    draw.text((x, y_offset), line, fill=(255, 255, 255), font=font)
+                    y_offset += 60
+                
+                # Convert back to OpenCV
+                background = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+            
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+            
+            for _ in range(total_frames):
+                out.write(background)
+            
+            out.release()
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error creating placeholder video: {e}")
+            return False
+    
+    async def combine_video_audio_segments(self, video_segments: List[str], audio_segments: List[str], 
+                                         output_path: str, resolution: str, transition_duration: float) -> bool:
+        """Combine video and audio segments using FFmpeg"""
+        try:
+            import subprocess
+            
+            # Create input list for FFmpeg
+            video_list_path = "temp_video_list.txt"
+            audio_list_path = "temp_audio_list.txt"
+            
+            # Prepare video list
+            with open(video_list_path, 'w') as f:
+                for video_file in video_segments:
+                    if video_file and Path(video_file).exists():
+                        f.write(f"file '{video_file}'\n")
+            
+            # Prepare audio list
+            with open(audio_list_path, 'w') as f:
+                for audio_file in audio_segments:
+                    if audio_file and Path(audio_file).exists():
+                        f.write(f"file '{audio_file}'\n")
+            
+            # Combine videos
+            temp_video = "temp_combined_video.mp4"
+            video_cmd = [
+                'ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', video_list_path,
+                '-c', 'copy', temp_video
+            ]
+            
+            # Combine audio
+            temp_audio = "temp_combined_audio.wav"
+            audio_cmd = [
+                'ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', audio_list_path,
+                '-c', 'copy', temp_audio
+            ]
+            
+            # Run commands
+            video_result = subprocess.run(video_cmd, capture_output=True, text=True)
+            audio_result = subprocess.run(audio_cmd, capture_output=True, text=True)
+            
+            if video_result.returncode == 0 and audio_result.returncode == 0:
+                # Combine video and audio
+                final_cmd = [
+                    'ffmpeg', '-y', '-i', temp_video, '-i', temp_audio,
+                    '-c:v', 'libx264', '-c:a', 'aac', '-strict', 'experimental',
+                    '-shortest', output_path
+                ]
+                
+                final_result = subprocess.run(final_cmd, capture_output=True, text=True)
+                
+                # Cleanup
+                for temp_file in [video_list_path, audio_list_path, temp_video, temp_audio]:
+                    if Path(temp_file).exists():
+                        Path(temp_file).unlink()
+                
+                return final_result.returncode == 0
+            else:
+                logger.error(f"FFmpeg error - Video: {video_result.stderr}, Audio: {audio_result.stderr}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error combining video and audio: {e}")
+            return False
+    
+    def cleanup_temp_files(self, temp_files: List[str]):
+        """Clean up temporary files"""
+        for temp_file in temp_files:
+            if temp_file and Path(temp_file).exists():
+                try:
+                    Path(temp_file).unlink()
+                except Exception as e:
+                    logger.warning(f"Could not delete temp file {temp_file}: {e}")
 
-# Global instances
+# Application instances
+app = FastAPI(
+    title="GleamVideo Enhanced",
+    description="AI-Powered Video Generation Platform",
+    version="2.0.0"
+)
+
+# Initialize global instances
 auto_mode_manager = AutoModeManager()
 video_generator = EnhancedVideoGenerator()
+
+# Configure middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Mount static files
+app.mount("/videos", StaticFiles(directory="videos"), name="videos")
+
+def update_progress(status: str, message: str, pct: float, current_task: str = ""):
+    """Update global progress state"""
+    global progress_data
+    progress_data.update({
+        "status": status,
+        "message": message,
+        "pct": max(0, min(100, pct)),
+        "current_task": current_task
+    })
+    logger.info(f"Progress: {pct:.1f}% - {message}")
+
+# ---------------------------------------------------------------------------
+# AI Integration with Gemini
+# ---------------------------------------------------------------------------
+class GeminiClient:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.base_url = "https://openrouter.ai/api/v1"
+        self.model = "google/gemini-2.5-flash"
+    
+    async def generate_content(self, prompt: str, system_prompt: str = None) -> str:
+        """Generate content using Gemini via OpenRouter"""
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://gleamvideo.com",
+            "X-Title": "GleamVideo Enhanced"
+        }
+        
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0.7,
+            "max_tokens": 4000
+        }
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=headers,
+                    json=payload
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data["choices"][0]["message"]["content"]
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"OpenRouter API error: {response.status} - {error_text}")
+                        raise Exception(f"API Error: {response.status}")
+        except Exception as e:
+            logger.error(f"Error calling Gemini API: {e}")
+            raise
+    
+    async def generate_reddit_reaction(self, reddit_content: Dict, target_length: int = 180) -> str:
+        """Generate a reaction/commentary video script for Reddit content"""
+        
+        # Enhanced system prompts based on personality
+        personality_prompts = {
+            "sarcastic_reviewer": """You are a sarcastic, witty content reviewer who reacts to Reddit posts. 
+            You're not afraid to be a bit vulgar (but not overly offensive) and use humor to engage viewers.
+            You point out absurdities, make clever observations, and aren't afraid to call out bullshit when you see it.
+            Keep your reactions authentic and entertaining. Use natural speech patterns that work well with text-to-speech.
+            Avoid hard-to-pronounce words and use contractions that sound natural when spoken.""",
+            
+            "enthusiastic_commentator": """You are an enthusiastic, energetic commentator who gets excited about Reddit content.
+            You're funny, a bit edgy, and love to share your genuine reactions. You use casual language and aren't afraid
+            to be a bit crude when it fits. Your goal is to entertain while providing actual commentary on the content.""",
+            
+            "analytical_roaster": """You are someone who deeply analyzes Reddit content but with a humorous, roasting twist.
+            You're intelligent but not pretentious, funny but not trying too hard. You call out logical fallacies,
+            point out contradictions, and aren't afraid to use colorful language when the situation calls for it."""
+        }
+        
+        system_prompt = personality_prompts.get(app_config.reaction_personality, personality_prompts["sarcastic_reviewer"])
+        
+        # Calculate target word count (roughly 150-180 words per minute of speech)
+        target_words = (target_length // 60) * 165
+        
+        content_prompt = f"""
+        React to this Reddit post from r/{app_config.target_subreddit}:
+        
+        Title: {reddit_content.get('title', 'No title')}
+        Content: {reddit_content.get('content', reddit_content.get('summary', 'No content'))}
+        
+        Create a {target_length}-second reaction video script (approximately {target_words} words).
+        
+        Your reaction should:
+        1. Actually READ and respond to the specific content (don't just summarize)
+        2. Include your genuine thoughts and opinions
+        3. Be entertaining and engaging
+        4. Use natural speech that sounds good with text-to-speech
+        5. Include some humor and personality
+        6. Feel like a real person reacting, not a robot reading
+        7. Point out interesting details or issues with the content
+        8. Be conversational and authentic
+        
+        Avoid:
+        - Just reading the content back
+        - Being overly polite or corporate
+        - Using complex words that are hard to pronounce
+        - Generic reactions that could apply to any post
+        
+        Write this as a natural monologue, like you're talking to a friend about what you just read.
+        """
+        
+        return await self.generate_content(content_prompt, system_prompt)
+    
+    async def generate_timed_content(self, content: str, target_duration: int) -> List[str]:
+        """Break content into time-appropriate segments"""
+        
+        # Estimate words per minute for speech (average 150-180 WPM)
+        words_per_minute = 165
+        target_words = (target_duration // 60) * words_per_minute
+        
+        # If content is too short, expand it
+        if len(content.split()) < target_words * 0.8:
+            expansion_prompt = f"""
+            Take this content and expand it to approximately {target_words} words while maintaining 
+            the same tone and style. Add more details, examples, and natural commentary:
+            
+            {content}
+            
+            Make sure the expansion feels natural and doesn't just add filler words.
+            """
+            content = await self.generate_content(expansion_prompt)
+        
+        # Break into segments of roughly 30-45 seconds each
+        words = content.split()
+        segment_size = words_per_minute // 2  # ~30 seconds worth of words
+        
+        segments = []
+        for i in range(0, len(words), segment_size):
+            segment = " ".join(words[i:i + segment_size])
+            if segment.strip():
+                segments.append(segment.strip())
+        
+        return segments
+
+# ---------------------------------------------------------------------------
+# API Routes
+# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # Pydantic Models
@@ -1114,94 +1230,90 @@ class APIKeyConfig(BaseModel):
 # ---------------------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    """Serve the enhanced modern UI"""
+    """Serve the enhanced video generation interface"""
     try:
-        with open("index.html", "r", encoding="utf-8") as f:
-            html_content = f.read()
+        html_content = open("index.html", "r").read()
         return HTMLResponse(content=html_content)
-    except FileNotFoundError:
-        return HTMLResponse(content="<h1>Error: index.html not found</h1>", status_code=404)
+    except Exception as e:
+        logger.error(f"Error serving index page: {e}")
+        return HTMLResponse(content="<h1>Error loading page</h1>", status_code=500)
 
 # ---------------------------------------------------------------------------
-# Data Models
+# API Routes
 # ---------------------------------------------------------------------------
-class APIKeyConfig(BaseModel):
-    openrouter_api_key: str
 
-class AutoModeConfig(BaseModel):
-    interval_hours: int = 1
-    rss_feeds: List[str] = []
-    voice: str = "female"
-
-# ---------------------------------------------------------------------------
-# API Endpoints
-# ---------------------------------------------------------------------------
-@app.post("/api/config/api-key")
+@app.post("/api/set-api-key")
 async def set_api_key(config: APIKeyConfig):
-    """Set the OpenRouter API key"""
+    """Set OpenRouter API key"""
     try:
         app_config.openrouter_api_key = config.openrouter_api_key
-        logger.info("OpenRouter API key updated")
-        return {"success": True}
+        return {"success": True, "message": "API key set successfully"}
     except Exception as e:
         logger.error(f"Error setting API key: {e}")
-        return {"success": False, "error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/auto-mode/start")
-async def start_auto_mode_api(config: AutoModeConfig):
-    """Start auto mode"""
+@app.post("/api/auto-mode/configure")
+async def configure_auto_mode(config: AutoModeConfig):
+    """Configure automated video generation"""
     try:
-        if not app_config.openrouter_api_key:
-            return {"success": False, "error": "OpenRouter API key not configured"}
+        # Stop current auto mode if running
+        if auto_mode_manager.is_running:
+            auto_mode_manager.stop_auto_mode()
         
         # Update configuration
-        if config.interval_hours > 0:
-            app_config.auto_mode_interval = config.interval_hours * 3600
+        app_config.auto_mode_interval = config.interval_hours * 3600
         
+        # Update RSS feeds if provided
         if config.rss_feeds:
             app_config.reddit_rss_feeds = config.rss_feeds
         
-        # Store voice preference for auto mode
-        app_config.auto_mode_voice = config.voice
+        # Update voice if provided
+        if config.voice:
+            app_config.auto_mode_voice = config.voice
         
-        # Start auto mode
+        # Mark auto mode as configured
+        app_config.auto_mode_enabled = True
+        
+        return {"success": True, "message": "Auto mode configured successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error configuring auto mode: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/auto-mode/start")
+async def start_auto_mode():
+    """Start automated video generation"""
+    try:
+        if not app_config.openrouter_api_key:
+            raise HTTPException(status_code=400, detail="OpenRouter API key required")
+        
+        if not app_config.auto_mode_enabled:
+            raise HTTPException(status_code=400, detail="Auto mode not configured")
+        
         success = await auto_mode_manager.start_auto_mode()
         
         if success:
-            app_config.auto_mode_enabled = True
-            return {"success": True}
+            return {"success": True, "message": "Auto mode started"}
         else:
-            return {"success": False, "error": "Failed to start auto mode"}
+            raise HTTPException(status_code=500, detail="Failed to start auto mode")
             
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error starting auto mode: {e}")
-        return {"success": False, "error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/auto-mode/stop")
-async def stop_auto_mode_api():
-    """Stop auto mode"""
+async def stop_auto_mode():
+    """Stop automated video generation"""
     try:
         auto_mode_manager.stop_auto_mode()
         app_config.auto_mode_enabled = False
-        return {"success": True}
+        return {"success": True, "message": "Auto mode stopped"}
+        
     except Exception as e:
         logger.error(f"Error stopping auto mode: {e}")
-        return {"success": False, "error": str(e)}
-
-@app.post("/api/auto-mode/run-now")
-async def run_auto_now_api():
-    """Trigger immediate auto generation"""
-    try:
-        if not app_config.openrouter_api_key:
-            return {"success": False, "error": "OpenRouter API key not configured"}
-        
-        # Run auto generation in background
-        asyncio.create_task(auto_mode_manager.run_auto_generation())
-        return {"success": True}
-        
-    except Exception as e:
-        logger.error(f"Error running auto now: {e}")
-        return {"success": False, "error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/auto-mode/status")
 async def get_auto_mode_status():
@@ -1217,8 +1329,8 @@ async def get_auto_mode_status():
 async def list_voices():
     """Get list of available TTS voices"""
     try:
-        if hasattr(gleam_video, 'tts_manager') and gleam_video.tts_manager:
-            voices = gleam_video.tts_manager.available_voices
+        if hasattr(video_generator, 'tts_manager') and video_generator.tts_manager:
+            voices = video_generator.tts_manager.available_voices
         else:
             voices = ["female", "male", "neutral"]  # Default fallback
         
@@ -1228,245 +1340,183 @@ async def list_voices():
         logger.error(f"Error getting voices: {e}")
         return {"voices": ["female", "male", "neutral"]}
 
-# Enhanced configuration endpoints
 @app.post("/api/config/reddit")
-async def set_reddit_config(config: dict):
-    """Set Reddit-specific configuration"""
+async def configure_reddit_settings(request: Request):
+    """Configure Reddit video generation settings"""
     try:
-        if 'target_subreddit' in config:
-            app_config.target_subreddit = config['target_subreddit']
+        config = await request.json()
         
-        if 'video_length_target' in config:
-            app_config.video_length_target = max(30, min(3600, config['video_length_target']))
+        # Update configuration
+        app_config.target_subreddit = config['target_subreddit']
         
-        if 'commentary_style' in config:
-            app_config.commentary_style = config['commentary_style']
+        # Update video length target
+        app_config.video_length_target = max(30, min(3600, config['video_length_target']))
         
-        if 'reaction_personality' in config:
-            app_config.reaction_personality = config['reaction_personality']
+        # Update commentary style
+        app_config.commentary_style = config['commentary_style']
         
-        if 'specific_reddit_posts' in config:
-            app_config.specific_reddit_posts = config['specific_reddit_posts']
+        # Update reaction personality
+        app_config.reaction_personality = config['reaction_personality']
         
-        logger.info("Reddit configuration updated")
-        return {"success": True}
+        # Update specific Reddit posts
+        app_config.specific_reddit_posts = config['specific_reddit_posts']
+        
+        return {"success": True, "message": "Reddit settings updated successfully"}
+        
     except Exception as e:
-        logger.error(f"Error setting Reddit config: {e}")
-        return {"success": False, "error": str(e)}
+        logger.error(f"Error updating Reddit config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/config/reddit")
-async def get_reddit_config():
-    """Get current Reddit configuration"""
+async def get_reddit_settings():
+    """Get current Reddit video generation settings"""
     return {
-        "target_subreddit": app_config.target_subreddit,
-        "video_length_target": app_config.video_length_target,
-        "commentary_style": app_config.commentary_style,
-        "reaction_personality": app_config.reaction_personality,
-        "specific_reddit_posts": app_config.specific_reddit_posts
+        "target_subreddit": getattr(app_config, 'target_subreddit', 'technology'),
+        "video_length_target": getattr(app_config, 'video_length_target', 180),
+        "commentary_style": getattr(app_config, 'commentary_style', 'funny_vulgar'),
+        "reaction_personality": getattr(app_config, 'reaction_personality', 'sarcastic_reviewer'),
+        "specific_reddit_posts": getattr(app_config, 'specific_reddit_posts', [])
     }
-
-@app.post("/api/generate/reddit-reaction")
-async def generate_reddit_reaction(request: dict):
-    """Generate a reaction video for specific Reddit content"""
-    try:
-        if not app_config.openrouter_api_key:
-            return {"success": False, "error": "OpenRouter API key not configured"}
-        
-        reddit_url = request.get('reddit_url')
-        video_length = request.get('video_length', app_config.video_length_target)
-        voice = request.get('voice', 'female')
-        
-        if not reddit_url:
-            return {"success": False, "error": "Reddit URL required"}
-        
-        # Start generation in background
-        asyncio.create_task(generate_specific_reddit_reaction(reddit_url, video_length, voice))
-        
-        return {"success": True, "message": "Reddit reaction generation started"}
-        
-    except Exception as e:
-        logger.error(f"Error starting Reddit reaction generation: {e}")
-        return {"success": False, "error": str(e)}
 
 @app.get("/api/videos/list")
 async def list_videos():
     """List generated videos"""
     try:
         videos_dir = Path("videos")
-        if not videos_dir.exists():
-            return {"videos": []}
+        videos_dir.mkdir(exist_ok=True)
         
         videos = []
         for video_file in videos_dir.glob("*.mp4"):
-            stat = video_file.stat()
-            videos.append({
-                "name": video_file.name,
-                "size": f"{stat.st_size / (1024*1024):.1f} MB",
-                "created": datetime.fromtimestamp(stat.st_ctime).isoformat()
-            })
+            try:
+                stat = video_file.stat()
+                videos.append({
+                    "filename": video_file.name,
+                    "size": stat.st_size,
+                    "created": stat.st_ctime,
+                    "url": f"/videos/{video_file.name}"
+                })
+            except Exception as e:
+                logger.warning(f"Error getting info for {video_file}: {e}")
         
         # Sort by creation time, newest first
         videos.sort(key=lambda x: x["created"], reverse=True)
+        
         return {"videos": videos}
         
     except Exception as e:
         logger.error(f"Error listing videos: {e}")
-        return {"videos": [], "error": str(e)}
+        return {"videos": []}
 
 @app.get("/videos/download/{filename}")
 async def download_video(filename: str):
-    """Download a generated video"""
-    try:
-        video_path = Path("videos") / filename
-        if video_path.exists() and video_path.suffix == ".mp4":
-            return FileResponse(
-                path=str(video_path),
-                filename=filename,
-                media_type="video/mp4"
-            )
-        else:
-            raise HTTPException(status_code=404, detail="Video not found")
-    except Exception as e:
-        logger.error(f"Error downloading video: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.delete("/api/videos/delete/{filename}")
-async def delete_video(filename: str):
-    """Delete a specific video"""
+    """Download a specific video file"""
     try:
         video_path = Path("videos") / filename
         if not video_path.exists():
-            return {"success": False, "error": "Video not found"}
+            raise HTTPException(status_code=404, detail="Video not found")
         
-        video_path.unlink()
-        logger.info(f"Video deleted: {filename}")
-        return {"success": True, "message": f"Video '{filename}' deleted successfully"}
+        return FileResponse(
+            path=str(video_path),
+            media_type="video/mp4",
+            filename=filename
+        )
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error deleting video {filename}: {e}")
-        return {"success": False, "error": str(e)}
+        logger.error(f"Error downloading video {filename}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.delete("/api/videos/clear-all")
-async def clear_all_videos():
-    """Delete all videos"""
+@app.post("/api/generate")
+async def generate_video(request: Request, background_tasks: BackgroundTasks):
+    """Generate video from paragraphs and links"""
     try:
-        videos_dir = Path("videos")
-        if not videos_dir.exists():
-            return {"success": True, "message": "No videos to delete"}
+        data = await request.json()
         
-        deleted_count = 0
-        for video_file in videos_dir.glob("*.mp4"):
-            try:
-                video_file.unlink()
-                deleted_count += 1
-            except Exception as e:
-                logger.error(f"Error deleting {video_file}: {e}")
+        paragraphs = data.get("paragraphs", [])
+        links = data.get("links", [])
+        resolution = data.get("resolution", "1920x1080")
+        voice = data.get("voice", "female")
         
-        logger.info(f"Cleared {deleted_count} videos")
-        return {"success": True, "message": f"Deleted {deleted_count} videos"}
-        
-    except Exception as e:
-        logger.error(f"Error clearing videos: {e}")
-        return {"success": False, "error": str(e)}
-
-@app.post("/generate_video")
-async def generate_video(
-    paragraphs: List[str] = Form(...),
-    links: List[str] = Form(default=[]),
-    output_name: str = Form(default="generated-video.mp4"),
-    resolution: str = Form(default="1920x1080"),
-    transition_duration: float = Form(default=2.0),
-    voice: str = Form(default="female"),
-    target_duration: int = Form(default=None)
-):
-    """Generate video from form data"""
-    try:
-        # Validate input
-        if not paragraphs or all(not p.strip() for p in paragraphs):
-            return {"success": False, "error": "No paragraphs provided"}
-        
-        # Filter out empty paragraphs and links
+        # Clean and validate inputs
         paragraphs = [p.strip() for p in paragraphs if p.strip()]
         links = [l.strip() for l in links if l.strip()]
         
-        # Ensure output name has .mp4 extension
-        if not output_name.endswith('.mp4'):
-            output_name += '.mp4'
+        if not paragraphs:
+            raise HTTPException(status_code=400, detail="At least one paragraph is required")
         
         # Start video generation in background
-        asyncio.create_task(video_generator.create_video(
+        background_tasks.add_task(
+            video_generator.create_video,
             paragraphs=paragraphs,
             links=links,
-            output_name=output_name,
             resolution=resolution,
-            transition_duration=transition_duration,
-            voice=voice,
-            target_duration=target_duration
-        ))
+            voice=voice
+        )
         
         return {"success": True, "message": "Video generation started"}
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error starting video generation: {e}")
-        return {"success": False, "error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/generate-reddit-reaction")
+async def generate_reddit_reaction(request: Request, background_tasks: BackgroundTasks):
+    """Generate a Reddit reaction video"""
+    try:
+        data = await request.json()
+        
+        reddit_url = data.get("reddit_url", "").strip()
+        video_length = data.get("video_length", 180)
+        voice = data.get("voice", "female")
+        
+        if not reddit_url:
+            raise HTTPException(status_code=400, detail="Reddit URL is required")
+        
+        if not app_config.openrouter_api_key:
+            raise HTTPException(status_code=400, detail="OpenRouter API key is required")
+        
+        # Start generation in background
+        background_tasks.add_task(
+            generate_specific_reddit_reaction,
+            reddit_url=reddit_url,
+            video_length=video_length,
+            voice=voice
+        )
+        
+        return {"success": True, "message": "Reddit reaction video generation started"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error starting Reddit reaction generation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/progress")
 async def get_progress():
-    """Get current progress"""
-    return {
-        "status": progress_data["status"],
-        "message": progress_data["message"],
-        "progress": progress_data["pct"],
-        "current_task": progress_data["current_task"],
-        "auto_mode": auto_mode_manager.is_running
-    }
+    """Get current video generation progress"""
+    return progress_data
 
 # ---------------------------------------------------------------------------
-# Application Lifecycle
+# Main Application Entry Point
 # ---------------------------------------------------------------------------
-@app.on_event("startup")
-async def startup_event():
-    """Initialize application on startup"""
-    try:
-        # Create necessary directories
-        os.makedirs("videos", exist_ok=True)
-        
-        # Initialize components
-        logger.info("GleamVideo Enhanced started successfully")
-        update_progress("idle", "Ready to generate videos", 0, "Ready")
-        
-    except Exception as e:
-        logger.error(f"Error during startup: {e}")
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown"""
-    try:
-        # Stop auto mode
-        auto_mode_manager.stop_auto_mode()
-        
-        # Cleanup screenshot manager
-        video_generator.screenshot_manager.cleanup()
-        
-        logger.info("GleamVideo Enhanced shutdown complete")
-        
-    except Exception as e:
-        logger.error(f"Error during shutdown: {e}")
-
-# ---------------------------------------------------------------------------
-# Main Entry Point
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    try:
-        logger.info("Starting GleamVideo Enhanced Server...")
-        uvicorn.run(
-            "gleamvideo:app",
-            host="0.0.0.0",
-            port=8000,
-            reload=False,
-            access_log=True
-        )
-    except KeyboardInterrupt:
-        logger.info("Server stopped by user")
-    except Exception as e:
-        logger.error(f"Error starting server: {e}")
+    import uvicorn
+    
+    # Create required directories
+    Path("videos").mkdir(exist_ok=True)
+    Path("screenshots").mkdir(exist_ok=True)
+    Path("temp").mkdir(exist_ok=True)
+    
+    logger.info("Starting GleamVideo Enhanced Server...")
+    logger.info("Access the application at: http://localhost:8000")
+    
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        log_level="info"
+    )
